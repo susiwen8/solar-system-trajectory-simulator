@@ -20,3 +20,6 @@ class BundledEphemeris:
             velocity_km_per_s=tuple(sample["velocityKmPerSec"]),
             mu_km3_per_s2=body_record["muKm3PerS2"],
         )
+
+    def get_all_body_states(self, epoch: str) -> list[BodyState]:
+        return [self.get_body_state(body_id, epoch) for body_id in self._dataset["bodies"]]
