@@ -1,11 +1,25 @@
-import type { TrajectoryResult } from "../../mission/types";
+import type { BodyState, TrajectoryResult } from "../../mission/types";
+import { scaleDistanceKm } from "../lib/scale";
 import { toScenePoints } from "../lib/trajectory";
 
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
+  bodies: BodyState[];
 };
 
-export default function SolarSystemScene({ result }: SolarSystemSceneProps) {
+const bodyColors: Record<string, string> = {
+  sun: "#f4b400",
+  mercury: "#b8aea1",
+  venus: "#d6b989",
+  earth: "#6ab8ff",
+  mars: "#e27c61",
+  jupiter: "#d9b07b",
+  saturn: "#d7ca9e",
+  uranus: "#8fdce0",
+  neptune: "#6f93ff"
+};
+
+export default function SolarSystemScene({ result, bodies }: SolarSystemSceneProps) {
   const points = toScenePoints(result.samples);
 
   return (
@@ -23,21 +37,49 @@ export default function SolarSystemScene({ result }: SolarSystemSceneProps) {
           perspective: "900px"
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            width: "1.1rem",
-            height: "1.1rem",
-            marginLeft: "-0.55rem",
-            marginTop: "-0.55rem",
-            borderRadius: "999px",
-            background: "#f4b400",
-            boxShadow: "0 0 22px rgba(255, 200, 0, 0.8)"
-          }}
-          title="Sun"
-        />
+        {bodies.map((body) => {
+          const x = scaleDistanceKm(body.positionKm[0]);
+          const y = scaleDistanceKm(body.positionKm[1]);
+          const z = scaleDistanceKm(body.positionKm[2]);
+          const color = bodyColors[body.bodyId] ?? "#f5f3ed";
+          const size = body.bodyId === "sun" ? 1.1 : 0.7;
+
+          return (
+            <div
+              key={body.bodyId}
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: `translate3d(${x}px, ${y}px, ${z}px)`
+              }}
+            >
+              <div
+                style={{
+                  width: `${size}rem`,
+                  height: `${size}rem`,
+                  marginLeft: `${-size / 2}rem`,
+                  marginTop: `${-size / 2}rem`,
+                  borderRadius: "999px",
+                  background: color,
+                  boxShadow: body.bodyId === "sun" ? "0 0 22px rgba(255, 200, 0, 0.8)" : "0 0 14px rgba(255,255,255,0.18)"
+                }}
+                title={body.bodyId}
+              />
+              <div
+                style={{
+                  marginTop: "0.6rem",
+                  color: "#f5f3ed",
+                  fontSize: "0.75rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em"
+                }}
+              >
+                {`Body: ${body.bodyId}`}
+              </div>
+            </div>
+          );
+        })}
 
         {points.map((point, index) => (
           <div

@@ -1,4 +1,8 @@
-import type { MissionRequest, TrajectoryResult } from "../features/mission/types";
+import type {
+  EphemerisBodiesResponse,
+  MissionRequest,
+  TrajectoryResult
+} from "../features/mission/types";
 
 export async function propagateMission(request: MissionRequest): Promise<TrajectoryResult> {
   const response = await fetch("/missions/propagate", {
@@ -14,4 +18,13 @@ export async function propagateMission(request: MissionRequest): Promise<Traject
   }
 
   return (await response.json()) as TrajectoryResult;
+}
+
+export async function fetchEphemerisBodies(epoch: string): Promise<EphemerisBodiesResponse> {
+  const response = await fetch(`/ephemeris/bodies?epoch=${encodeURIComponent(epoch)}`);
+  if (!response.ok) {
+    throw new Error(`Ephemeris request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as EphemerisBodiesResponse;
 }

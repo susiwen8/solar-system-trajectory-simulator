@@ -2,12 +2,13 @@ import { useState } from "react";
 
 import MissionForm from "./features/mission/components/MissionForm";
 import MissionSummary from "./features/mission/components/MissionSummary";
-import type { MissionRequest, TrajectoryResult } from "./features/mission/types";
+import type { BodyState, MissionRequest, TrajectoryResult } from "./features/mission/types";
 import SolarSystemScene from "./features/scene/components/SolarSystemScene";
-import { propagateMission } from "./lib/api";
+import { fetchEphemerisBodies, propagateMission } from "./lib/api";
 
 export default function App() {
   const [result, setResult] = useState<TrajectoryResult | null>(null);
+  const [bodies, setBodies] = useState<BodyState[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -16,8 +17,12 @@ export default function App() {
     setErrorMessage(null);
 
     try {
-      const nextResult = await propagateMission(request);
+      const [nextResult, ephemeris] = await Promise.all([
+        propagateMission(request),
+        fetchEphemerisBodies(request.launchEpoch)
+      ]);
       setResult(nextResult);
+      setBodies(ephemeris.bodies);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Propagation request failed");
     } finally {
@@ -44,7 +49,7 @@ export default function App() {
       {result ? (
         <>
           <MissionSummary result={result} />
-          <SolarSystemScene result={result} />
+          <SolarSystemScene result={result} bodies={bodies} />
         </>
       ) : null}
     </main>

@@ -47,3 +47,17 @@ export type ScenePoint = {
   y: number;
   z: number;
 };
+
+export type BodyState = {
+  bodyId: string;
+  epoch: string;
+  positionKm: [number, number, number];
+  velocityKmPerSec: [number, number, number];
+  muKm3PerS2: number;
+};
+
+export type EphemerisBodiesResponse = {
+  referenceFrame: string;
+  epoch: string;
+  bodies: BodyState[];
+};
