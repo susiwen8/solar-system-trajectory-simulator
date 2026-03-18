@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Union
 
 import numpy as np
@@ -36,7 +37,6 @@ class MissionService:
             raise ValueError("Only stateVector missions are supported right now")
 
         sun_state = self.ephemeris.get_body_state("sun", request.launchEpoch)
-        target_state = self.ephemeris.get_body_state(request.targetBody, request.launchEpoch)
         initial_state = np.array(
             [
                 *request.initialState.stateVector.positionKm,
@@ -55,7 +55,8 @@ class MissionService:
             acceleration_fn=acceleration_fn,
         )
         samples = self._serialize_samples(propagation)
-        closest_approach = compute_closest_approach(samples, request.targetBody, target_state.position_km)
+        target_samples = self._target_samples_for_request(request, samples)
+        closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
         warnings = self._compute_warnings(samples)
 
         return MissionPropagationResult(
@@ -88,3 +89,27 @@ class MissionService:
         if max_distance_km > 1_000_000_000:
             warnings.append("Probe distance exceeds the trusted phase-1 operating range")
         return warnings
+
+    def _target_samples_for_request(
+        self,
+        request: MissionRequest,
+        samples: List[Dict[str, object]],
+    ) -> List[Dict[str, object]]:
+        return [
+            {
+                "epochSeconds": sample["epochSeconds"],
+                "positionKm": list(
+                    self.ephemeris.get_body_state(
+                        request.targetBody,
+                        _epoch_with_offset(request.launchEpoch, sample["epochSeconds"]),
+                    ).position_km
+                ),
+            }
+            for sample in samples
+        ]
+
+
+def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
+    start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)
+    shifted = start + timedelta(seconds=offset_seconds)
+    return shifted.isoformat(timespec="milliseconds").replace("+00:00", "Z")
