@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "./App";
@@ -13,7 +13,8 @@ it("renders the simulator heading", () => {
 });
 
 it("shows the mission metrics panel after propagation results load", async () => {
-  vi.spyOn(globalThis, "fetch")
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -82,6 +83,36 @@ it("shows the mission metrics panel after propagation results load", async () =>
           }
         },
       ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T06:00:00.000Z",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [-25500000, 144500000, 0],
+              velocityKmPerSec: [-29.8, -5.2, 0],
+              muKm3PerS2: 398600.435436
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
     );
 
   render(<App />);
@@ -90,4 +121,9 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByText("Closest Approach")).toBeInTheDocument();
   expect(await screen.findByText("Body: earth")).toBeInTheDocument();
   expect(await screen.findByText("Body: mars")).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Playback Step"), { target: { value: "1" } });
+
+  expect(await screen.findByText("Current Epoch: 2026-01-01T06:00:00.000Z")).toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenLastCalledWith("/ephemeris/bodies?epoch=2026-01-01T06%3A00%3A00.000Z");
 });

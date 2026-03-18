@@ -5,6 +5,9 @@ import { toScenePoints } from "../lib/trajectory";
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
   bodies: BodyState[];
+  currentEpoch: string | null;
+  selectedSampleIndex: number;
+  onSampleIndexChange: (index: number) => void;
 };
 
 const bodyColors: Record<string, string> = {
@@ -19,12 +22,31 @@ const bodyColors: Record<string, string> = {
   neptune: "#6f93ff"
 };
 
-export default function SolarSystemScene({ result, bodies }: SolarSystemSceneProps) {
+export default function SolarSystemScene({
+  result,
+  bodies,
+  currentEpoch,
+  selectedSampleIndex,
+  onSampleIndexChange
+}: SolarSystemSceneProps) {
   const points = toScenePoints(result.samples);
 
   return (
     <section aria-label="Solar System Scene">
       <h2>Trajectory Scene</h2>
+      <label style={{ display: "grid", gap: "0.35rem", maxWidth: "28rem", color: "#2d3340" }}>
+        Playback Step
+        <input
+          aria-label="Playback Step"
+          type="range"
+          min={0}
+          max={Math.max(result.samples.length - 1, 0)}
+          step={1}
+          value={selectedSampleIndex}
+          onChange={(event) => onSampleIndexChange(Number(event.target.value))}
+        />
+      </label>
+      <p>{currentEpoch ? `Current Epoch: ${currentEpoch}` : "Current Epoch: pending"}</p>
       <div
         style={{
           position: "relative",
@@ -88,12 +110,12 @@ export default function SolarSystemScene({ result, bodies }: SolarSystemScenePro
               position: "absolute",
               left: "50%",
               top: "50%",
-              width: index === points.length - 1 ? "0.65rem" : "0.32rem",
-              height: index === points.length - 1 ? "0.65rem" : "0.32rem",
-              marginLeft: index === points.length - 1 ? "-0.325rem" : "-0.16rem",
-              marginTop: index === points.length - 1 ? "-0.325rem" : "-0.16rem",
+              width: index === selectedSampleIndex ? "0.65rem" : "0.32rem",
+              height: index === selectedSampleIndex ? "0.65rem" : "0.32rem",
+              marginLeft: index === selectedSampleIndex ? "-0.325rem" : "-0.16rem",
+              marginTop: index === selectedSampleIndex ? "-0.325rem" : "-0.16rem",
               borderRadius: "999px",
-              background: index === points.length - 1 ? "#8fe3ff" : "rgba(143, 227, 255, 0.55)",
+              background: index === selectedSampleIndex ? "#8fe3ff" : "rgba(143, 227, 255, 0.55)",
               transform: `translate3d(${point.x}px, ${point.y}px, ${point.z}px)`
             }}
           />

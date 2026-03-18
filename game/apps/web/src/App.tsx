@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import MissionForm from "./features/mission/components/MissionForm";
 import MissionSummary from "./features/mission/components/MissionSummary";
@@ -9,20 +9,48 @@ import { fetchEphemerisBodies, propagateMission } from "./lib/api";
 export default function App() {
   const [result, setResult] = useState<TrajectoryResult | null>(null);
   const [bodies, setBodies] = useState<BodyState[]>([]);
+  const [launchEpoch, setLaunchEpoch] = useState<string | null>(null);
+  const [selectedSampleIndex, setSelectedSampleIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const currentEpoch =
+    result && launchEpoch
+      ? epochFromOffset(launchEpoch, result.samples[selectedSampleIndex]?.epochSeconds ?? 0)
+      : null;
+
+  useEffect(() => {
+    if (!currentEpoch) {
+      return;
+    }
+
+    let cancelled = false;
+    void fetchEphemerisBodies(currentEpoch)
+      .then((ephemeris) => {
+        if (!cancelled) {
+          setBodies(ephemeris.bodies);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : "Ephemeris request failed");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEpoch]);
 
   async function handleSubmit(request: MissionRequest) {
     setLoading(true);
     setErrorMessage(null);
 
     try {
-      const [nextResult, ephemeris] = await Promise.all([
-        propagateMission(request),
-        fetchEphemerisBodies(request.launchEpoch)
-      ]);
+      const nextResult = await propagateMission(request);
       setResult(nextResult);
-      setBodies(ephemeris.bodies);
+      setLaunchEpoch(request.launchEpoch);
+      setSelectedSampleIndex(0);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Propagation request failed");
     } finally {
@@ -49,9 +77,19 @@ export default function App() {
       {result ? (
         <>
           <MissionSummary result={result} />
-          <SolarSystemScene result={result} bodies={bodies} />
+          <SolarSystemScene
+            result={result}
+            bodies={bodies}
+            currentEpoch={currentEpoch}
+            selectedSampleIndex={selectedSampleIndex}
+            onSampleIndexChange={setSelectedSampleIndex}
+          />
         </>
       ) : null}
     </main>
   );
+}
+
+function epochFromOffset(baseEpoch: string, offsetSeconds: number): string {
+  return new Date(new Date(baseEpoch).getTime() + offsetSeconds * 1000).toISOString();
 }
