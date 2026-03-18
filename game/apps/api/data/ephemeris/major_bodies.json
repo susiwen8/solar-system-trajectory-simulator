@@ -1,0 +1,32 @@
+{
+  "referenceFrame": "heliocentric-inertial",
+  "bodies": {
+    "sun": {
+      "muKm3PerS2": 132712440018.0,
+      "samples": {
+        "2026-01-01T00:00:00Z": {
+          "positionKm": [0.0, 0.0, 0.0],
+          "velocityKmPerSec": [0.0, 0.0, 0.0]
+        }
+      }
+    },
+    "earth": {
+      "muKm3PerS2": 398600.435436,
+      "samples": {
+        "2026-01-01T00:00:00Z": {
+          "positionKm": [-24856124.0, 144936962.0, -6980.0],
+          "velocityKmPerSec": [-29.837, -5.127, 0.0003]
+        }
+      }
+    },
+    "mars": {
+      "muKm3PerS2": 42828.375816,
+      "samples": {
+        "2026-01-01T00:00:00Z": {
+          "positionKm": [-159185432.0, 188245763.0, 7650983.0],
+          "velocityKmPerSec": [-17.235, -13.254, 0.156]
+        }
+      }
+    }
+  }
+}
