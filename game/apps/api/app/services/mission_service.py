@@ -79,4 +79,12 @@ class MissionService:
     def _compute_warnings(self, samples: List[Dict[str, object]]) -> List[str]:
         if not samples:
             return ["No trajectory samples were produced"]
-        return []
+
+        max_distance_km = max(
+            sum(component * component for component in sample["positionKm"]) ** 0.5
+            for sample in samples
+        )
+        warnings: List[str] = []
+        if max_distance_km > 1_000_000_000:
+            warnings.append("Probe distance exceeds the trusted phase-1 operating range")
+        return warnings
