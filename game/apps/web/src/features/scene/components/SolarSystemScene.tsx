@@ -5,6 +5,7 @@ import { localizeMissionSegment, planetLabel, t, type Language } from "../../../
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
 import TrajectoryInsetMap from "./TrajectoryInsetMap";
 import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
+import { computeFocusBodyVisualProfile } from "../lib/focus-visuals";
 import { buildInsetMapModel } from "../lib/inset-map";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
 import { scaleDistanceKm } from "../lib/scale";
@@ -860,6 +861,7 @@ function createAnchorMesh(
 function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
   const radius = bodyRadii[body.bodyId] ?? 1.8;
   const group = new THREE.Group();
+  const focusVisual = isFocusBody ? computeFocusBodyVisualProfile(body.bodyId, focusScale >= 2 ? "flyby-emphasis" : focusScale > 1 ? "approach-emphasis" : "cruise-follow") : null;
   const geometry = new THREE.SphereGeometry(radius, 24, 24);
   const material = new THREE.MeshStandardMaterial({
     color: bodyColors[body.bodyId] ?? "#f5f3ed",
@@ -885,15 +887,30 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: bo
   group.add(mesh);
   if (isFocusBody && body.bodyId !== "sun") {
     const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(radius * 1.2, 24, 24),
+      new THREE.SphereGeometry(radius * (focusVisual?.haloScale ?? 1.18), 24, 24),
       new THREE.MeshBasicMaterial({
-        color: bodyColors[body.bodyId] ?? "#f5f3ed",
+        color: focusVisual?.atmosphereColor ?? bodyColors[body.bodyId] ?? "#f5f3ed",
         transparent: true,
-        opacity: 0.12,
+        opacity: focusVisual?.haloOpacity ?? 0.12,
         side: THREE.DoubleSide,
       }),
     );
     group.add(halo);
+
+    const atmosphere = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * ((focusVisual?.haloScale ?? 1.18) + 0.06), 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: focusVisual?.atmosphereColor ?? bodyColors[body.bodyId] ?? "#f5f3ed",
+        transparent: true,
+        opacity: focusVisual?.atmosphereOpacity ?? 0.08,
+        side: THREE.DoubleSide,
+      }),
+    );
+    group.add(atmosphere);
+
+    if ((focusVisual?.bandCount ?? 0) > 0) {
+      group.add(createGasGiantBands(radius, focusVisual?.bandCount ?? 0, focusVisual?.bandOpacity ?? 0.12));
+    }
   }
   if (isHighlighted || isFocusBody) {
     group.scale.setScalar(isFocusBody ? focusScale : 1.2);
@@ -925,6 +942,29 @@ function createLocalMotionStreaks(
       opacity: mode === "flyby-emphasis" ? 0.34 : 0.18,
     });
     group.add(new THREE.Line(geometry, material));
+  }
+
+  return group;
+}
+
+function createGasGiantBands(radius: number, bandCount: number, opacity: number) {
+  const group = new THREE.Group();
+
+  for (let index = 0; index < bandCount; index += 1) {
+    const normalized = bandCount === 1 ? 0 : index / (bandCount - 1);
+    const yOffset = (normalized - 0.5) * radius * 1.15;
+    const ringRadius = Math.max(radius * (0.64 - Math.abs(normalized - 0.5) * 0.26), radius * 0.38);
+    const band = new THREE.Mesh(
+      new THREE.TorusGeometry(ringRadius, 0.09, 10, 48),
+      new THREE.MeshBasicMaterial({
+        color: "#f6e2bf",
+        transparent: true,
+        opacity,
+      }),
+    );
+    band.rotation.x = Math.PI / 2;
+    band.position.y = yOffset;
+    group.add(band);
   }
 
   return group;
