@@ -1,4 +1,4 @@
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -30,3 +30,22 @@ class MissionRequest(BaseModel):
     initialState: InitialStateInput
     durationSeconds: Optional[float] = Field(default=None, gt=0)
     outputStepSeconds: Optional[float] = Field(default=None, gt=0)
+
+
+class MissionTourRequest(BaseModel):
+    departureBody: str = Field(min_length=1)
+    requiredVisitBodies: List[str] = Field(min_length=1, max_length=4)
+    launchEpoch: str = Field(min_length=1)
+    maxAssistBodiesPerLeg: int = Field(default=2, ge=0, le=2)
+    maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
+    allowAssistBodies: bool = True
+    allowRepeatedFlybys: bool = True
+
+    @model_validator(mode="after")
+    def validate_required_visit_bodies(self) -> "MissionTourRequest":
+        unique_bodies = set(self.requiredVisitBodies)
+        if len(unique_bodies) != len(self.requiredVisitBodies):
+            raise ValueError("requiredVisitBodies must be unique")
+        if self.departureBody in unique_bodies:
+            raise ValueError("requiredVisitBodies cannot include the departure body")
+        return self

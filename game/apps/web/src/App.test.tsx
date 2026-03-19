@@ -309,3 +309,160 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
 
   expect(await screen.findByText("240 天")).toBeInTheDocument();
 });
+
+it("plans a multi-planet tour and renders ranked tour candidates", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          ephemerisSource: "bundled-keplerian",
+          samples: [
+            {
+              epochSeconds: 0,
+              positionKm: [149597870.7, 0, 0],
+              velocityKmPerSec: [0, 29.78, 0]
+            }
+          ],
+          closestApproach: {
+            bodyId: "saturn",
+            distanceKm: 42,
+            epochSeconds: 100
+          },
+          flightTimeSeconds: 900 * 86400,
+          warnings: ["Patched-conic gravity-assist candidate"],
+          visitOrder: ["venus", "jupiter", "saturn"],
+          fullSequenceBodies: ["earth", "venus", "earth", "jupiter", "saturn"],
+          score: 88.4,
+          deltaVKmPerS: 31.7,
+          flybyEvents: [],
+          visitEvents: [
+            {
+              bodyId: "venus",
+              epoch: "2026-05-01T00:00:00.000Z",
+              positionKm: [108000000, 0, 0]
+            }
+          ],
+          legs: [
+            {
+              startBody: "earth",
+              endBody: "venus",
+              assistBodies: [],
+              durationSeconds: 120 * 86400,
+              deltaVKmPerS: 8.2,
+              closestApproachKm: 15
+            }
+          ],
+          candidates: [
+            {
+              visitOrder: ["venus", "jupiter", "saturn"],
+              fullSequenceBodies: ["earth", "venus", "earth", "jupiter", "saturn"],
+              score: 88.4,
+              deltaVKmPerS: 31.7,
+              flightTimeSeconds: 900 * 86400,
+              samples: [
+                {
+                  epochSeconds: 0,
+                  positionKm: [149597870.7, 0, 0],
+                  velocityKmPerSec: [0, 29.78, 0]
+                }
+              ],
+              closestApproach: {
+                bodyId: "saturn",
+                distanceKm: 42,
+                epochSeconds: 100
+              },
+              warnings: [],
+              flybyEvents: [],
+              visitEvents: [],
+              legs: []
+            },
+            {
+              visitOrder: ["jupiter", "venus", "saturn"],
+              fullSequenceBodies: ["earth", "jupiter", "venus", "saturn"],
+              score: 95.1,
+              deltaVKmPerS: 36.2,
+              flightTimeSeconds: 1040 * 86400,
+              samples: [
+                {
+                  epochSeconds: 0,
+                  positionKm: [149597870.7, 0, 0],
+                  velocityKmPerSec: [0, 29.78, 0]
+                }
+              ],
+              closestApproach: {
+                bodyId: "saturn",
+                distanceKm: 75,
+                epochSeconds: 100
+              },
+              warnings: [],
+              flybyEvents: [],
+              visitEvents: [],
+              legs: []
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T00:00:00.000Z",
+          ephemerisSource: "bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [149597870.7, 0, 0],
+              velocityKmPerSec: [0, 29.78, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "saturn",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [1400000000, 0, 0],
+              velocityKmPerSec: [0, 9.6, 0],
+              muKm3PerS2: 37931187,
+              sourceName: "keplerian-elements"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    );
+
+  render(<App />);
+  await userEvent.selectOptions(screen.getByLabelText("任务类型"), "tour");
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(await screen.findByText("引力辅助候选方案")).toBeInTheDocument();
+  expect(await screen.findByText("地球 -> 金星 -> 地球 -> 木星 -> 土星")).toBeInTheDocument();
+  expect(await screen.findByText(/拜访顺序: 金星 -> 木星 -> 土星/)).toBeInTheDocument();
+  expect(await screen.findByText("900 天")).toBeInTheDocument();
+  expect(await screen.findByText("拜访事件")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: /地球 -> 木星 -> 金星 -> 土星/ }));
+
+  expect(await screen.findByText("1,040 天")).toBeInTheDocument();
+});

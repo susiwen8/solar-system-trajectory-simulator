@@ -223,6 +223,12 @@ export default function SolarSystemScene({
             <span>{copy.warnings}</span>
             <strong>{result.warnings.length}</strong>
           </div>
+          {result.visitEvents?.length ? (
+            <div>
+              <span>{copy.visitEventsLabel}</span>
+              <strong>{result.visitEvents.length}</strong>
+            </div>
+          ) : null}
           <div>
             <span>{copy.renderer}</span>
             <strong>{renderMode === "webgl" ? copy.threeJs : copy.fallback}</strong>
@@ -342,6 +348,9 @@ function syncSceneObjects(
   }
   for (const flybyEvent of result.flybyEvents ?? []) {
     runtime.dynamicGroup.add(createFlybyMarker(flybyEvent.positionKm, flybyEvent.bodyId, language));
+  }
+  for (const visitEvent of result.visitEvents ?? []) {
+    runtime.dynamicGroup.add(createVisitMarker(visitEvent.positionKm, visitEvent.bodyId, language));
   }
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
@@ -528,6 +537,51 @@ function createFlybyMarker(
     new THREE.Color(bodyColors[bodyId] ?? "#f5f3ed"),
   );
   label.position.set(0, 0.6, 15);
+  group.add(label);
+  return group;
+}
+
+function createVisitMarker(
+  positionKm: [number, number, number],
+  bodyId: string,
+  language: Language,
+) {
+  const copy = t(language);
+  const group = new THREE.Group();
+  group.position.copy(toThreeVector(positionKm));
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(9.2, 11.6, 56),
+    new THREE.MeshBasicMaterial({
+      color: "#ffd46b",
+      transparent: true,
+      opacity: 0.48,
+      side: THREE.DoubleSide,
+    }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  group.add(ring);
+
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(2.4, 18, 18),
+    new THREE.MeshStandardMaterial({
+      color: bodyColors[bodyId] ?? "#f5f3ed",
+      emissive: "#ffd46b",
+      emissiveIntensity: 0.45,
+      metalness: 0.08,
+      roughness: 0.72,
+      transparent: true,
+      opacity: 0.9,
+    }),
+  );
+  core.position.y = 0.35;
+  group.add(core);
+
+  const label = createAnchorLabel(
+    `${planetLabel(language, bodyId)} ${copy.visitSuffix}`,
+    new THREE.Color("#ffd46b"),
+  );
+  label.position.set(0, 0.8, 19);
   group.add(label);
   return group;
 }

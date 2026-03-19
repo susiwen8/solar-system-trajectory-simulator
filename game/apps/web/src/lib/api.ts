@@ -1,6 +1,7 @@
 import type {
   EphemerisBodiesResponse,
   MissionRequest,
+  MissionTourRequest,
   TrajectoryResult
 } from "../features/mission/types";
 
@@ -35,4 +36,20 @@ export async function fetchEphemerisBodies(epoch: string): Promise<EphemerisBodi
   }
 
   return (await response.json()) as EphemerisBodiesResponse;
+}
+
+export async function planMissionTour(request: MissionTourRequest): Promise<TrajectoryResult> {
+  const response = await fetch(createApiUrl("/missions/plan-tour"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Tour planning request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as TrajectoryResult;
 }

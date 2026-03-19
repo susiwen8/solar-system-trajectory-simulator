@@ -27,6 +27,16 @@ export type MissionRequest = {
   outputStepSeconds?: number;
 };
 
+export type MissionTourRequest = {
+  departureBody: "earth";
+  requiredVisitBodies: Exclude<BodyId, "earth">[];
+  launchEpoch: string;
+  maxAssistBodiesPerLeg?: number;
+  maxReturnedCandidates?: number;
+  allowAssistBodies?: boolean;
+  allowRepeatedFlybys?: boolean;
+};
+
 export type TrajectorySample = {
   epochSeconds: number;
   positionKm: [number, number, number];
@@ -49,8 +59,27 @@ export type FlybyEvent = {
   outboundVInfinityKmPerS: number;
 };
 
+export type VisitEvent = {
+  bodyId: string;
+  epoch: string;
+  positionKm: [number, number, number];
+};
+
+export type MissionLeg = {
+  startBody: string;
+  endBody: string;
+  assistBodies: string[];
+  durationSeconds: number;
+  deltaVKmPerS: number;
+  closestApproachKm: number;
+};
+
 export type MissionCandidate = {
-  sequenceBodies: string[];
+  sequenceBodies?: string[];
+  visitOrder?: string[];
+  fullSequenceBodies?: string[];
+  legs?: MissionLeg[];
+  visitEvents?: VisitEvent[];
   score: number;
   deltaVKmPerS: number;
   flightTimeSeconds: number;
@@ -69,6 +98,10 @@ export type TrajectoryResult = {
   warnings: string[];
   candidates?: MissionCandidate[];
   sequenceBodies?: string[];
+  visitOrder?: string[];
+  fullSequenceBodies?: string[];
+  visitEvents?: VisitEvent[];
+  legs?: MissionLeg[];
   score?: number;
   deltaVKmPerS?: number;
   flybyEvents?: FlybyEvent[];

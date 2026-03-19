@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-import MissionForm from "./features/mission/components/MissionForm";
+import MissionForm, { type MissionSubmission } from "./features/mission/components/MissionForm";
 import MissionSummary from "./features/mission/components/MissionSummary";
 import type { BodyState, MissionCandidate, MissionRequest, TrajectoryResult } from "./features/mission/types";
 import SolarSystemScene from "./features/scene/components/SolarSystemScene";
-import { fetchEphemerisBodies, propagateMission } from "./lib/api";
+import { fetchEphemerisBodies, planMissionTour, propagateMission } from "./lib/api";
 import { planetLabel, t, type Language } from "./lib/i18n";
 
 export default function App() {
@@ -89,21 +89,30 @@ export default function App() {
     };
   }, [isPlaying, activeResult, selectedSampleIndex]);
 
-  async function handleSubmit(request: MissionRequest) {
+  async function handleSubmit(submission: MissionSubmission) {
     setLoading(true);
     setErrorMessage(null);
     setIsPlaying(false);
 
     try {
-      const nextResult = await propagateMission(request);
+      const nextResult =
+        submission.kind === "tour"
+          ? await planMissionTour(submission.request)
+          : await propagateMission(submission.request as MissionRequest);
       setResult(nextResult);
       setActiveCandidateIndex(0);
       setEphemerisSource(nextResult.ephemerisSource);
-      setLaunchEpoch(request.launchEpoch);
+      setLaunchEpoch(submission.request.launchEpoch);
       setSelectedSampleIndex(0);
       ephemerisCacheRef.current = {};
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : copy.propagationRequestFailed);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : submission.kind === "tour"
+            ? copy.tourPlanningRequestFailed
+            : copy.propagationRequestFailed,
+      );
     } finally {
       setLoading(false);
     }
@@ -183,7 +192,7 @@ export default function App() {
             <div className="candidate-list">
               {result.candidates.map((candidate, index) => (
                 <button
-                  key={`${candidate.sequenceBodies.join("-")}-${index}`}
+                  key={`${candidateLabelBodies(candidate).join("-")}-${index}`}
                   type="button"
                   className={`candidate-card ${index === activeCandidateIndex ? "candidate-card--active" : ""}`}
                   onClick={() => {
@@ -193,10 +202,16 @@ export default function App() {
                     ephemerisCacheRef.current = {};
                   }}
                 >
-                  <strong>{candidate.sequenceBodies.map((bodyId) => planetLabel(language, bodyId)).join(" -> ")}</strong>
+                  <strong>{candidateLabelBodies(candidate).map((bodyId) => planetLabel(language, bodyId)).join(" -> ")}</strong>
+                  {candidate.visitOrder?.length ? (
+                    <span>
+                      {copy.visitOrderLabel}: {candidate.visitOrder.map((bodyId) => planetLabel(language, bodyId)).join(" -> ")}
+                    </span>
+                  ) : null}
                   <span>{copy.scoreLabel}: {candidate.score.toFixed(2)}</span>
                   <span>{copy.deltaVLabel}: {candidate.deltaVKmPerS.toFixed(2)} km/s</span>
-                  <span>{copy.flybyCountLabel}: {Math.max(candidate.sequenceBodies.length - 2, 0)}</span>
+                  <span>{copy.flybyCountLabel}: {Math.max(candidateLabelBodies(candidate).length - (candidate.visitOrder?.length ?? 2) - 1, 0)}</span>
+                  {candidate.visitOrder?.length ? <span>{copy.visitCountLabel}: {candidate.visitOrder.length}</span> : null}
                 </button>
               ))}
             </div>
@@ -266,13 +281,21 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
     samples: candidate.samples,
     closestApproach: candidate.closestApproach,
     flightTimeSeconds: candidate.flightTimeSeconds,
-    warnings: candidate.warnings,
+    warnings: candidate.warnings.length ? candidate.warnings : result.warnings,
     candidates: result.candidates,
-    sequenceBodies: candidate.sequenceBodies,
+    sequenceBodies: candidate.sequenceBodies ?? result.sequenceBodies,
+    visitOrder: candidate.visitOrder ?? result.visitOrder,
+    fullSequenceBodies: candidate.fullSequenceBodies ?? result.fullSequenceBodies,
+    visitEvents: candidate.visitEvents?.length ? candidate.visitEvents : result.visitEvents,
+    legs: candidate.legs?.length ? candidate.legs : result.legs,
     score: candidate.score,
     deltaVKmPerS: candidate.deltaVKmPerS,
     flybyEvents: candidate.flybyEvents,
   };
+}
+
+function candidateLabelBodies(candidate: MissionCandidate): string[] {
+  return candidate.fullSequenceBodies ?? candidate.sequenceBodies ?? [];
 }
 
 function epochFromOffset(baseEpoch: string, offsetSeconds: number): string {
