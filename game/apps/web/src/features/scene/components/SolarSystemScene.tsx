@@ -5,6 +5,7 @@ import { localizeMissionSegment, planetLabel, t, type Language } from "../../../
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
 import TrajectoryInsetMap from "./TrajectoryInsetMap";
 import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
+import { advanceCameraMotion, type CameraMotionState } from "../lib/camera-motion";
 import { computeFocusBodyVisualProfile } from "../lib/focus-visuals";
 import { buildInsetMapModel } from "../lib/inset-map";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
@@ -32,11 +33,14 @@ type SolarSystemSceneProps = {
 
 type SceneRuntime = {
   camera: THREE.PerspectiveCamera;
+  frameHandle: number | null;
   dynamicGroup: THREE.Group;
+  currentMotion: CameraMotionState | null;
   renderer: THREE.WebGLRenderer;
   resizeObserver: ResizeObserver | null;
   render: () => void;
   scene: THREE.Scene;
+  targetMotion: CameraMotionState | null;
   setView: (samplePositionKm: [number, number, number], view: ProbeCameraView, zoom: number) => void;
   setZoom: (zoom: number) => void;
   stop: () => void;
@@ -537,6 +541,25 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
       renderer.render(scene, camera);
     };
 
+    const applyMotion = (motion: CameraMotionState) => {
+      camera.fov = motion.fovDeg;
+      camera.zoom = motion.zoom;
+      camera.position.set(motion.position[0], motion.position[1], motion.position[2]);
+      camera.lookAt(motion.lookAt[0], motion.lookAt[1], motion.lookAt[2]);
+      camera.updateProjectionMatrix();
+    };
+
+    const tick = () => {
+      if (runtime.targetMotion) {
+        runtime.currentMotion = runtime.currentMotion
+          ? advanceCameraMotion(runtime.currentMotion, runtime.targetMotion, 0.16)
+          : runtime.targetMotion;
+        applyMotion(runtime.currentMotion);
+        render();
+      }
+      runtime.frameHandle = window.requestAnimationFrame(tick);
+    };
+
     const resize = () => {
       const width = Math.max(surface.clientWidth, 1);
       const height = Math.max(surface.clientHeight, 1);
@@ -548,11 +571,14 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
 
     const runtime: SceneRuntime = {
       camera,
+      frameHandle: null,
       dynamicGroup,
+      currentMotion: null,
       renderer,
       render,
       resizeObserver: null,
       scene,
+      targetMotion: null,
       setView: (samplePositionKm, view, zoom) => {
         const probePosition = toThreeVector(samplePositionKm);
         const forward = toThreeDirection(view.lookDirection);
@@ -572,24 +598,36 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
           .add(right.clone().multiplyScalar(lateralOffset));
         const lookAtTarget = probePosition.clone().add(forward.clone().multiplyScalar(lookAheadDistance));
 
-        camera.fov = view.fovDeg;
-        camera.zoom = zoom;
-        camera.position.copy(cameraPosition);
-        camera.lookAt(lookAtTarget);
-        camera.updateProjectionMatrix();
-        render();
+        runtime.targetMotion = {
+          position: [cameraPosition.x, cameraPosition.y, cameraPosition.z],
+          lookAt: [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z],
+          fovDeg: view.fovDeg,
+          zoom,
+        };
+        if (!runtime.currentMotion) {
+          runtime.currentMotion = runtime.targetMotion;
+          applyMotion(runtime.currentMotion);
+          render();
+        }
       },
       setZoom: (zoom: number) => {
-        camera.zoom = zoom;
-        camera.updateProjectionMatrix();
-        render();
+        if (runtime.targetMotion) {
+          runtime.targetMotion = {
+            ...runtime.targetMotion,
+            zoom,
+          };
+        }
       },
       stop: () => {
         runtime.resizeObserver?.disconnect();
+        if (runtime.frameHandle != null) {
+          window.cancelAnimationFrame(runtime.frameHandle);
+        }
       },
     };
 
     resize();
+    runtime.frameHandle = window.requestAnimationFrame(tick);
 
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
     resizeObserver?.observe(surface);
