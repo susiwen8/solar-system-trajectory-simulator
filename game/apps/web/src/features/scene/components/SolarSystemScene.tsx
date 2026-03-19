@@ -17,6 +17,7 @@ import {
   formatSpeedValue,
   type SpeedTelemetryMode,
 } from "../lib/speed-telemetry";
+import { interpolateTrajectorySample } from "../lib/trajectory";
 
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
@@ -74,6 +75,7 @@ const bodyRadii: Record<string, number> = {
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 2.4;
 const DEFAULT_ZOOM = 1.15;
+const PLAYBACK_STEP_MS = 80;
 
 export default function SolarSystemScene({
   result,
@@ -91,10 +93,12 @@ export default function SolarSystemScene({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<SceneRuntime | null>(null);
+  const playbackFrameRef = useRef<number | null>(null);
   const [renderMode, setRenderMode] = useState<"webgl" | "fallback">("fallback");
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
   const [hoveredBodyId, setHoveredBodyId] = useState<string | null>(null);
   const [telemetryMode, setTelemetryMode] = useState<SpeedTelemetryMode>("speed");
+  const [playbackBlend, setPlaybackBlend] = useState(0);
   const copy = t(language);
   const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, telemetryMode);
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
@@ -105,7 +109,16 @@ export default function SolarSystemScene({
   const phaseSegments = result.missionTimeline?.phases ?? [];
   const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
   const activeSegmentDetail = formatActiveSegmentDetail(activeSegment, language);
-  const activeSample = result.samples[Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0))] ?? result.samples[0];
+  const baseSampleIndex = Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0));
+  const activeSample = interpolateTrajectorySample(
+    result.samples[baseSampleIndex] ?? result.samples[0],
+    result.samples[baseSampleIndex + 1],
+    playbackBlend,
+  );
+  const displayedPathSamples = [
+    ...result.samples.slice(0, baseSampleIndex + 1),
+    ...(playbackBlend > 0 && result.samples[baseSampleIndex + 1] ? [activeSample] : []),
+  ];
   const cameraView = activeSample
     ? computeProbeCameraView({
         sample: activeSample,
@@ -160,12 +173,44 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel);
-  }, [bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel]);
+    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel, activeSample, displayedPathSamples);
+  }, [activeSample, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel, displayedPathSamples]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
   }, [zoomLevel]);
+
+  useEffect(() => {
+    if (playbackFrameRef.current != null) {
+      window.cancelAnimationFrame(playbackFrameRef.current);
+      playbackFrameRef.current = null;
+    }
+
+    if (!isPlaying || baseSampleIndex >= result.samples.length - 1) {
+      setPlaybackBlend(0);
+      return;
+    }
+
+    const startedAt = performance.now();
+
+    const tick = (now: number) => {
+      const alpha = Math.min((now - startedAt) / PLAYBACK_STEP_MS, 1);
+      setPlaybackBlend(alpha);
+      if (alpha < 1) {
+        playbackFrameRef.current = window.requestAnimationFrame(tick);
+      }
+    };
+
+    setPlaybackBlend(0);
+    playbackFrameRef.current = window.requestAnimationFrame(tick);
+
+    return () => {
+      if (playbackFrameRef.current != null) {
+        window.cancelAnimationFrame(playbackFrameRef.current);
+        playbackFrameRef.current = null;
+      }
+    };
+  }, [isPlaying, baseSampleIndex, result.samples]);
 
   function handleZoomChange(nextZoom: number) {
     setZoomLevel(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM));
@@ -634,9 +679,10 @@ function syncSceneObjects(
   language: Language,
   cameraView: ProbeCameraView | null,
   zoomLevel: number,
+  activeSample: TrajectoryResult["samples"][number],
+  displayedPathSamples: TrajectoryResult["samples"],
 ) {
   clearGroup(runtime.dynamicGroup);
-  const activeSample = result.samples[Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0))] ?? result.samples[0];
   if (activeSample && cameraView) {
     runtime.setView(
       activeSample.positionKm,
@@ -671,8 +717,8 @@ function syncSceneObjects(
     }
   }
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
-  runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
-  runtime.dynamicGroup.add(createTrajectoryMarkers(result.samples.slice(0, selectedSampleIndex + 1)));
+  runtime.dynamicGroup.add(createTrajectoryLine(displayedPathSamples, "#8fe3ff", 0.96));
+  runtime.dynamicGroup.add(createTrajectoryMarkers(displayedPathSamples));
   runtime.dynamicGroup.add(createProbeMarker(activeSample, cameraView));
 
   if (activeSample && cameraView) {
