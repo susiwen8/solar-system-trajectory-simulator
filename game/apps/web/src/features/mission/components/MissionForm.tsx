@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { planetLabel, t, type Language } from "../../../lib/i18n";
 import type { BodyId, MissionRequest, MissionTourRequest, PropulsionConfig } from "../types";
@@ -19,8 +19,7 @@ type MissionFormProps = {
   loading: boolean;
 };
 
-const targetPlanets = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"] as const;
-const visitPlanets = targetPlanets.filter((planet) => planet !== "earth") as Exclude<BodyId, "earth">[];
+const visitPlanets = ["mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"] as const satisfies readonly Exclude<BodyId, "earth">[];
 
 const defaultTrajectoryRequest: MissionRequest = {
   departureBody: "earth",
@@ -33,20 +32,17 @@ const defaultTrajectoryRequest: MissionRequest = {
   },
   initialState: {
     launchFromBody: {
-      mode: "autoTransfer"
-    }
-  }
+      mode: "autoTransfer",
+    },
+  },
 };
 
-const defaultTourRequest: MissionTourRequest = {
-  departureBody: "earth",
-  requiredVisitBodies: ["venus", "jupiter", "saturn"],
-  launchEpoch: "2026-01-01T00:00:00Z",
+const defaultPlannerOptions = {
   maxAssistBodiesPerLeg: 2,
   maxReturnedCandidates: 5,
   allowAssistBodies: true,
   allowRepeatedFlybys: true,
-};
+} as const;
 
 const defaultPropulsionConfig: PropulsionConfig = {
   initialMassKg: 1800,
@@ -56,17 +52,25 @@ const defaultPropulsionConfig: PropulsionConfig = {
 };
 
 export default function MissionForm({ onSubmit, language, loading }: MissionFormProps) {
-  const [missionType, setMissionType] = useState<"trajectory" | "tour">("trajectory");
+  const [selectedBodies, setSelectedBodies] = useState<Exclude<BodyId, "earth">[]>(["mars"]);
   const [trajectoryRequest, setTrajectoryRequest] = useState<MissionRequest>(defaultTrajectoryRequest);
-  const [tourRequest, setTourRequest] = useState<MissionTourRequest>(defaultTourRequest);
-  const [pendingVisitBody, setPendingVisitBody] = useState<Exclude<BodyId, "earth">>("mars");
+  const [propulsionConfig, setPropulsionConfig] = useState<PropulsionConfig | null>(null);
   const copy = t(language);
+  const isSingleDestination = selectedBodies.length <= 1;
   const trajectoryMode = trajectoryRequest.initialState.launchFromBody ? "autoTransfer" : "stateVector";
 
-  const availableVisitBodies = useMemo(
-    () => visitPlanets.filter((planet) => !tourRequest.requiredVisitBodies.includes(planet)),
-    [tourRequest.requiredVisitBodies],
-  );
+  function updateLaunchEpoch(value: string) {
+    setTrajectoryRequest((current) => ({ ...current, launchEpoch: value }));
+  }
+
+  function toggleVisitBody(bodyId: Exclude<BodyId, "earth">) {
+    setSelectedBodies((current) => {
+      if (current.includes(bodyId)) {
+        return current.filter((body) => body !== bodyId);
+      }
+      return [...current, bodyId];
+    });
+  }
 
   function updatePosition(index: 0 | 1 | 2, value: number) {
     setTrajectoryRequest((current) => {
@@ -81,9 +85,9 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
         initialState: {
           stateVector: {
             ...currentStateVector,
-            positionKm: next
-          }
-        }
+            positionKm: next,
+          },
+        },
       };
     });
   }
@@ -101,9 +105,9 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
         initialState: {
           stateVector: {
             ...currentStateVector,
-            velocityKmPerSec: next
-          }
-        }
+            velocityKmPerSec: next,
+          },
+        },
       };
     });
   }
@@ -117,9 +121,9 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
           outputStepSeconds: undefined,
           initialState: {
             launchFromBody: {
-              mode: "autoTransfer"
-            }
-          }
+              mode: "autoTransfer",
+            },
+          },
         };
       }
 
@@ -131,84 +135,51 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
           stateVector:
             current.initialState.stateVector ?? {
               positionKm: [149597870.7, 0, 0],
-              velocityKmPerSec: [0, 29.78, 0]
-            }
-        }
+              velocityKmPerSec: [0, 29.78, 0],
+            },
+        },
       };
     });
   }
 
-  function addVisitBody() {
-    if (!availableVisitBodies.includes(pendingVisitBody)) {
-      return;
-    }
-
-    setTourRequest((current) => ({
-      ...current,
-      requiredVisitBodies: [...current.requiredVisitBodies, pendingVisitBody],
-    }));
-
-    const nextBody = availableVisitBodies.find((planet) => planet !== pendingVisitBody);
-    if (nextBody) {
-      setPendingVisitBody(nextBody);
-    }
+  function togglePropulsion(enabled: boolean) {
+    setPropulsionConfig(enabled ? propulsionConfig ?? defaultPropulsionConfig : null);
   }
 
-  function removeVisitBody(bodyId: Exclude<BodyId, "earth">) {
-    setTourRequest((current) => ({
-      ...current,
-      requiredVisitBodies: current.requiredVisitBodies.filter((planet) => planet !== bodyId),
-    }));
-    setPendingVisitBody(bodyId);
-  }
-
-  function toggleTrajectoryPropulsion(enabled: boolean) {
-    setTrajectoryRequest((current) => ({
-      ...current,
-      propulsionConfig: enabled ? current.propulsionConfig ?? defaultPropulsionConfig : undefined,
-    }));
-  }
-
-  function toggleTourPropulsion(enabled: boolean) {
-    setTourRequest((current) => ({
-      ...current,
-      propulsionConfig: enabled ? current.propulsionConfig ?? defaultPropulsionConfig : undefined,
-    }));
-  }
-
-  function updateTrajectoryPropulsion<K extends keyof PropulsionConfig>(key: K, value: number) {
-    setTrajectoryRequest((current) => ({
-      ...current,
-      propulsionConfig: {
-        ...(current.propulsionConfig ?? defaultPropulsionConfig),
-        [key]: value,
-      },
-    }));
-  }
-
-  function updateTourPropulsion<K extends keyof PropulsionConfig>(key: K, value: number) {
-    setTourRequest((current) => ({
-      ...current,
-      propulsionConfig: {
-        ...(current.propulsionConfig ?? defaultPropulsionConfig),
-        [key]: value,
-      },
-    }));
+  function updatePropulsion<K extends keyof PropulsionConfig>(key: K, value: number) {
+    setPropulsionConfig({
+      ...(propulsionConfig ?? defaultPropulsionConfig),
+      [key]: value,
+    });
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (missionType === "tour") {
+    if (selectedBodies.length === 0) {
+      return;
+    }
+
+    if (selectedBodies.length === 1) {
       await onSubmit({
-        kind: "tour",
-        request: tourRequest,
+        kind: "trajectory",
+        request: {
+          ...trajectoryRequest,
+          targetBody: selectedBodies[0],
+          propulsionConfig: propulsionConfig ?? undefined,
+        },
       });
       return;
     }
 
     await onSubmit({
-      kind: "trajectory",
-      request: trajectoryRequest,
+      kind: "tour",
+      request: {
+        departureBody: "earth",
+        requiredVisitBodies: selectedBodies,
+        launchEpoch: trajectoryRequest.launchEpoch,
+        propulsionConfig: propulsionConfig ?? undefined,
+        ...defaultPlannerOptions,
+      },
     });
   }
 
@@ -216,37 +187,56 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
     <form className="mission-form" onSubmit={handleSubmit}>
       <fieldset className="mission-form__fieldset">
         <legend>{copy.missionInput}</legend>
-        <p className="mission-form__hint">
-          {missionType === "trajectory" ? copy.missionHint : copy.tourMissionHint}
-        </p>
 
         <div className="mission-form__group">
           <div className="mission-form__group-header">
             <h3>{copy.missionSetup}</h3>
-            <p>{copy.missionSetupBody}</p>
           </div>
 
           <div className="mission-form__grid mission-form__grid--two">
             <label className="mission-field">
-              <span>{copy.missionType}</span>
-              <select
-                aria-label={copy.missionType}
-                value={missionType}
-                disabled={loading}
-                onChange={(event) => setMissionType(event.target.value as "trajectory" | "tour")}
-              >
-                <option value="trajectory">{copy.missionTypeSingle}</option>
-                <option value="tour">{copy.missionTypeTour}</option>
-              </select>
-            </label>
-
-            <label className="mission-field">
               <span>{copy.departureBody}</span>
               <input name="departureBody" value={planetLabel(language, "earth")} readOnly />
             </label>
+
+            <label className="mission-field">
+              <span>{copy.launchEpoch}</span>
+              <input
+                aria-label={copy.launchEpoch}
+                value={trajectoryRequest.launchEpoch}
+                disabled={loading}
+                onChange={(event) => updateLaunchEpoch(event.target.value)}
+              />
+            </label>
           </div>
 
-          {missionType === "trajectory" ? (
+          <div className="summary-card summary-card--placeholder">
+            <p className="summary-card__eyebrow">{copy.visitPlanets}</p>
+            <p className="mission-form__hint">{copy.visitPlanetsHint}</p>
+            <div className="mission-chip-list mission-chip-list--selectable">
+              {visitPlanets.map((planet) => {
+                const checked = selectedBodies.includes(planet);
+                return (
+                  <label
+                    key={planet}
+                    className={`mission-choice-chip ${checked ? "mission-choice-chip--active" : ""}`}
+                  >
+                    <input
+                      className="mission-choice-chip__input"
+                      type="checkbox"
+                      aria-label={planetLabel(language, planet)}
+                      checked={checked}
+                      disabled={loading}
+                      onChange={() => toggleVisitBody(planet)}
+                    />
+                    <span>{planetLabel(language, planet)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {isSingleDestination ? (
             <>
               <div className="mission-form__grid mission-form__grid--two">
                 <label className="mission-field">
@@ -260,41 +250,6 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
                     <option value="autoTransfer">{copy.autoTransfer}</option>
                     <option value="stateVector">{copy.stateVector}</option>
                   </select>
-                </label>
-
-                <label className="mission-field">
-                  <span>{copy.targetPlanet}</span>
-                  <select
-                    aria-label={copy.targetPlanet}
-                    value={trajectoryRequest.targetBody}
-                    disabled={loading}
-                    onChange={(event) =>
-                      setTrajectoryRequest((current) => ({
-                        ...current,
-                        targetBody: event.target.value as MissionRequest["targetBody"]
-                      }))
-                    }
-                  >
-                    {targetPlanets.map((planet) => (
-                      <option key={planet} value={planet}>
-                        {planetLabel(language, planet)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="mission-form__grid">
-                <label className="mission-field">
-                  <span>{copy.launchEpoch}</span>
-                  <input
-                    aria-label={copy.launchEpoch}
-                    value={trajectoryRequest.launchEpoch}
-                    disabled={loading}
-                    onChange={(event) =>
-                      setTrajectoryRequest((current) => ({ ...current, launchEpoch: event.target.value }))
-                    }
-                  />
                 </label>
               </div>
 
@@ -323,281 +278,80 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
                       onChange={(event) =>
                         setTrajectoryRequest((current) => ({
                           ...current,
-                          outputStepSeconds: Number(event.target.value)
+                          outputStepSeconds: Number(event.target.value),
                         }))
                       }
                     />
                   </label>
                 </div>
-              ) : (
-                <div className="summary-card summary-card--placeholder">
-                  <p className="summary-card__eyebrow">{copy.autoTransfer}</p>
-                  <p>{copy.autoTransferBody}</p>
-                </div>
-              )}
-
-              <div className="summary-card summary-card--placeholder">
-                <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>
-                <p>{copy.propulsionHint}</p>
-                <label className="mission-field mission-field--checkbox">
-                  <span>{copy.enableFiniteThrust}</span>
-                  <input
-                    aria-label={copy.enableFiniteThrust}
-                    type="checkbox"
-                    checked={trajectoryRequest.propulsionConfig != null}
-                    disabled={loading}
-                    onChange={(event) => toggleTrajectoryPropulsion(event.target.checked)}
-                  />
-                </label>
-                {trajectoryRequest.propulsionConfig ? (
-                  <div className="mission-form__grid mission-form__grid--two">
-                    <label className="mission-field">
-                      <span>{copy.initialMass}</span>
-                      <input
-                        aria-label={copy.initialMass}
-                        type="number"
-                        value={trajectoryRequest.propulsionConfig.initialMassKg}
-                        disabled={loading}
-                        onChange={(event) => updateTrajectoryPropulsion("initialMassKg", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.propellantMass}</span>
-                      <input
-                        aria-label={copy.propellantMass}
-                        type="number"
-                        value={trajectoryRequest.propulsionConfig.propellantMassKg}
-                        disabled={loading}
-                        onChange={(event) => updateTrajectoryPropulsion("propellantMassKg", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.maxThrust}</span>
-                      <input
-                        aria-label={copy.maxThrust}
-                        type="number"
-                        step="0.1"
-                        value={trajectoryRequest.propulsionConfig.maxThrustN}
-                        disabled={loading}
-                        onChange={(event) => updateTrajectoryPropulsion("maxThrustN", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.ispSeconds}</span>
-                      <input
-                        aria-label={copy.ispSeconds}
-                        type="number"
-                        value={trajectoryRequest.propulsionConfig.ispSeconds}
-                        disabled={loading}
-                        onChange={(event) => updateTrajectoryPropulsion("ispSeconds", Number(event.target.value))}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </div>
+              ) : null}
             </>
-          ) : (
-            <>
-              <div className="mission-form__grid">
-                <label className="mission-field">
-                  <span>{copy.launchEpoch}</span>
-                  <input
-                    aria-label={copy.launchEpoch}
-                    value={tourRequest.launchEpoch}
-                    disabled={loading}
-                    onChange={(event) => setTourRequest((current) => ({ ...current, launchEpoch: event.target.value }))}
-                  />
-                </label>
-              </div>
+          ) : null}
 
-              <div className="summary-card summary-card--placeholder">
-                <p className="summary-card__eyebrow">{copy.requiredVisits}</p>
-                <p>{copy.requiredVisitsBody}</p>
-                <div className="mission-chip-list">
-                  {tourRequest.requiredVisitBodies.map((bodyId) => (
-                    <button
-                      key={bodyId}
-                      type="button"
-                      className="mission-chip"
-                      onClick={() => removeVisitBody(bodyId)}
-                      disabled={loading}
-                    >
-                      {planetLabel(language, bodyId)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mission-form__grid mission-form__grid--two">
-                  <label className="mission-field">
-                    <span>{copy.addVisitBody}</span>
-                    <select
-                      aria-label={copy.addVisitBody}
-                      value={availableVisitBodies.includes(pendingVisitBody) ? pendingVisitBody : availableVisitBodies[0] ?? ""}
-                      disabled={loading || availableVisitBodies.length === 0}
-                      onChange={(event) => setPendingVisitBody(event.target.value as Exclude<BodyId, "earth">)}
-                    >
-                      {availableVisitBodies.map((planet) => (
-                        <option key={planet} value={planet}>
-                          {planetLabel(language, planet)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className="mission-field mission-field--action">
-                    <span>{copy.requiredVisits}</span>
-                    <button
-                      type="button"
-                      className="scene-action-button scene-action-button--ghost"
-                      onClick={addVisitBody}
-                      disabled={loading || availableVisitBodies.length === 0}
-                    >
-                      {copy.addVisitBody}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mission-form__grid mission-form__grid--two">
-                <label className="mission-field mission-field--checkbox">
-                  <span>{copy.allowAssistBodies}</span>
-                  <input
-                    aria-label={copy.allowAssistBodies}
-                    type="checkbox"
-                    checked={tourRequest.allowAssistBodies ?? true}
-                    disabled={loading}
-                    onChange={(event) =>
-                      setTourRequest((current) => ({
-                        ...current,
-                        allowAssistBodies: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-
-                <label className="mission-field mission-field--checkbox">
-                  <span>{copy.allowRepeatedFlybys}</span>
-                  <input
-                    aria-label={copy.allowRepeatedFlybys}
-                    type="checkbox"
-                    checked={tourRequest.allowRepeatedFlybys ?? true}
-                    disabled={loading}
-                    onChange={(event) =>
-                      setTourRequest((current) => ({
-                        ...current,
-                        allowRepeatedFlybys: event.target.checked,
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-
+          <div className="summary-card summary-card--placeholder">
+            <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>
+            <label className="mission-field mission-field--checkbox">
+              <span>{copy.enableFiniteThrust}</span>
+              <input
+                aria-label={copy.enableFiniteThrust}
+                type="checkbox"
+                checked={propulsionConfig != null}
+                disabled={loading}
+                onChange={(event) => togglePropulsion(event.target.checked)}
+              />
+            </label>
+            {propulsionConfig ? (
               <div className="mission-form__grid mission-form__grid--two">
                 <label className="mission-field">
-                  <span>{copy.maxAssistBodiesPerLeg}</span>
+                  <span>{copy.initialMass}</span>
                   <input
-                    aria-label={copy.maxAssistBodiesPerLeg}
+                    aria-label={copy.initialMass}
                     type="number"
-                    min={0}
-                    max={2}
+                    value={propulsionConfig.initialMassKg}
                     disabled={loading}
-                    value={tourRequest.maxAssistBodiesPerLeg ?? 2}
-                    onChange={(event) =>
-                      setTourRequest((current) => ({
-                        ...current,
-                        maxAssistBodiesPerLeg: Number(event.target.value),
-                      }))
-                    }
+                    onChange={(event) => updatePropulsion("initialMassKg", Number(event.target.value))}
                   />
                 </label>
-
                 <label className="mission-field">
-                  <span>{copy.maxReturnedCandidates}</span>
+                  <span>{copy.propellantMass}</span>
                   <input
-                    aria-label={copy.maxReturnedCandidates}
+                    aria-label={copy.propellantMass}
                     type="number"
-                    min={1}
-                    max={10}
+                    value={propulsionConfig.propellantMassKg}
                     disabled={loading}
-                    value={tourRequest.maxReturnedCandidates ?? 5}
-                    onChange={(event) =>
-                      setTourRequest((current) => ({
-                        ...current,
-                        maxReturnedCandidates: Number(event.target.value),
-                      }))
-                    }
+                    onChange={(event) => updatePropulsion("propellantMassKg", Number(event.target.value))}
                   />
                 </label>
-              </div>
-
-              <div className="summary-card summary-card--placeholder">
-                <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>
-                <p>{copy.propulsionHint}</p>
-                <label className="mission-field mission-field--checkbox">
-                  <span>{copy.enableFiniteThrust}</span>
+                <label className="mission-field">
+                  <span>{copy.maxThrust}</span>
                   <input
-                    aria-label={copy.enableFiniteThrust}
-                    type="checkbox"
-                    checked={tourRequest.propulsionConfig != null}
+                    aria-label={copy.maxThrust}
+                    type="number"
+                    step="0.1"
+                    value={propulsionConfig.maxThrustN}
                     disabled={loading}
-                    onChange={(event) => toggleTourPropulsion(event.target.checked)}
+                    onChange={(event) => updatePropulsion("maxThrustN", Number(event.target.value))}
                   />
                 </label>
-                {tourRequest.propulsionConfig ? (
-                  <div className="mission-form__grid mission-form__grid--two">
-                    <label className="mission-field">
-                      <span>{copy.initialMass}</span>
-                      <input
-                        aria-label={copy.initialMass}
-                        type="number"
-                        value={tourRequest.propulsionConfig.initialMassKg}
-                        disabled={loading}
-                        onChange={(event) => updateTourPropulsion("initialMassKg", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.propellantMass}</span>
-                      <input
-                        aria-label={copy.propellantMass}
-                        type="number"
-                        value={tourRequest.propulsionConfig.propellantMassKg}
-                        disabled={loading}
-                        onChange={(event) => updateTourPropulsion("propellantMassKg", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.maxThrust}</span>
-                      <input
-                        aria-label={copy.maxThrust}
-                        type="number"
-                        step="0.1"
-                        value={tourRequest.propulsionConfig.maxThrustN}
-                        disabled={loading}
-                        onChange={(event) => updateTourPropulsion("maxThrustN", Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="mission-field">
-                      <span>{copy.ispSeconds}</span>
-                      <input
-                        aria-label={copy.ispSeconds}
-                        type="number"
-                        value={tourRequest.propulsionConfig.ispSeconds}
-                        disabled={loading}
-                        onChange={(event) => updateTourPropulsion("ispSeconds", Number(event.target.value))}
-                      />
-                    </label>
-                  </div>
-                ) : null}
+                <label className="mission-field">
+                  <span>{copy.ispSeconds}</span>
+                  <input
+                    aria-label={copy.ispSeconds}
+                    type="number"
+                    value={propulsionConfig.ispSeconds}
+                    disabled={loading}
+                    onChange={(event) => updatePropulsion("ispSeconds", Number(event.target.value))}
+                  />
+                </label>
               </div>
-            </>
-          )}
+            ) : null}
+          </div>
         </div>
 
-        {missionType === "trajectory" && trajectoryMode === "stateVector" ? (
+        {isSingleDestination && trajectoryMode === "stateVector" ? (
           <div className="mission-form__group">
             <div className="mission-form__group-header">
               <h3>{copy.initialStateVector}</h3>
-              <p>{copy.initialStateBody}</p>
             </div>
 
             <div className="mission-form__grid mission-form__grid--three">
@@ -670,7 +424,7 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
           </div>
         ) : null}
 
-        <button className="mission-submit-button" type="submit" disabled={loading}>
+        <button className="mission-submit-button" type="submit" disabled={loading || selectedBodies.length === 0}>
           {loading ? (
             <>
               <span className="mission-submit-button__spinner" data-testid="mission-submit-spinner" aria-hidden="true" />

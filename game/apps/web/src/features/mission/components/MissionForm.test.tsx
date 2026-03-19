@@ -3,12 +3,29 @@ import userEvent from "@testing-library/user-event";
 
 import MissionForm from "./MissionForm";
 
-it("submits a request for an Earth to Mars mission", async () => {
+it("renders a unified visit selector instead of a mission-type dropdown", () => {
+  render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
+
+  expect(screen.queryByLabelText("任务类型")).not.toBeInTheDocument();
+  expect(screen.getByText("拜访星球")).toBeInTheDocument();
+  expect(screen.getByRole("checkbox", { name: "火星" })).toBeInTheDocument();
+  expect(screen.queryByRole("checkbox", { name: "地球" })).not.toBeInTheDocument();
+  expect(screen.getByText("系统将自动优化访问顺序")).toBeInTheDocument();
+  expect(screen.queryByText("单目标任务")).not.toBeInTheDocument();
+  expect(screen.queryByText("多星球巡游")).not.toBeInTheDocument();
+});
+
+it("starts with mars selected by default", () => {
+  render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
+
+  expect(screen.getByRole("checkbox", { name: "火星" })).toBeChecked();
+});
+
+it("submits a trajectory request when exactly one body is selected", async () => {
   const onSubmit = vi.fn();
   render(<MissionForm onSubmit={onSubmit} language="en" loading={false} />);
 
   expect(screen.getByLabelText("Trajectory Mode")).toHaveValue("autoTransfer");
-  await userEvent.selectOptions(screen.getByLabelText("Target Planet"), "mars");
   await userEvent.clear(screen.getByLabelText("Launch Epoch"));
   await userEvent.type(screen.getByLabelText("Launch Epoch"), "2026-10-15T00:00:00Z");
   await userEvent.click(screen.getByRole("button", { name: "Propagate Trajectory" }));
@@ -19,18 +36,35 @@ it("submits a request for an Earth to Mars mission", async () => {
       request: expect.objectContaining({
         departureBody: "earth",
         targetBody: "mars",
+        launchEpoch: "2026-10-15T00:00:00Z",
         initialState: { launchFromBody: { mode: "autoTransfer" } },
-        launchProfile: {
-          mode: "parkingOrbit",
-          parkingOrbitAltitudeKm: 300,
-          parkingOrbitInclinationDeg: 28.5,
-        },
       }),
     }),
   );
 });
 
-it("submits propulsion settings when finite-thrust corrections are enabled", async () => {
+it("submits a tour request when multiple bodies are selected", async () => {
+  const onSubmit = vi.fn();
+  render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
+
+  await userEvent.click(screen.getByRole("checkbox", { name: "金星" }));
+  await userEvent.clear(screen.getByLabelText("发射时刻"));
+  await userEvent.type(screen.getByLabelText("发射时刻"), "2026-03-01T00:00:00Z");
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "tour",
+      request: expect.objectContaining({
+        departureBody: "earth",
+        requiredVisitBodies: ["mars", "venus"],
+        launchEpoch: "2026-03-01T00:00:00Z",
+      }),
+    }),
+  );
+});
+
+it("submits propulsion settings for unified single-destination missions", async () => {
   const onSubmit = vi.fn();
   render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
 
@@ -59,25 +93,4 @@ it("shows a disabled loading button while propagation is running", () => {
 
   expect(screen.getByRole("button", { name: "正在计算轨迹..." })).toBeDisabled();
   expect(screen.getByTestId("mission-submit-spinner")).toBeInTheDocument();
-});
-
-it("submits a multi-planet tour request", async () => {
-  const onSubmit = vi.fn();
-  render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
-
-  await userEvent.selectOptions(screen.getByLabelText("任务类型"), "tour");
-  await userEvent.clear(screen.getByLabelText("发射时刻"));
-  await userEvent.type(screen.getByLabelText("发射时刻"), "2026-03-01T00:00:00Z");
-  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
-
-  expect(onSubmit).toHaveBeenCalledWith(
-    expect.objectContaining({
-      kind: "tour",
-      request: expect.objectContaining({
-        departureBody: "earth",
-        requiredVisitBodies: ["venus", "jupiter", "saturn"],
-        launchEpoch: "2026-03-01T00:00:00Z",
-      }),
-    }),
-  );
 });
