@@ -1,0 +1,4 @@
+apps/api/.pytest_cache/
+apps/api/.venv/
+apps/web/dist/
+apps/web/node_modules/
