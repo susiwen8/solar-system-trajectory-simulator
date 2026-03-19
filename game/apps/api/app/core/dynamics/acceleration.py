@@ -1,6 +1,8 @@
-from typing import Dict, Optional, Set
+from typing import Dict, Iterable, Optional, Set, Tuple
 
 import numpy as np
+
+from app.core.dynamics.thrust import BurnSegment, burn_mass_flow_kg_per_s, is_burn_active, thrust_acceleration_km_per_s2
 
 
 def point_mass_acceleration(
@@ -39,3 +41,31 @@ def combined_point_mass_acceleration(
         )
 
     return acceleration
+
+
+def finite_thrust_acceleration(
+    epoch_seconds: float,
+    *,
+    mass_kg: float,
+    burn_segments: Iterable[BurnSegment],
+) -> Tuple[np.ndarray, float]:
+    acceleration = np.zeros(3, dtype=float)
+    mass_flow_kg_per_s = 0.0
+
+    for burn_segment in burn_segments:
+        if not is_burn_active(burn_segment, epoch_seconds):
+            continue
+        acceleration += np.array(
+            thrust_acceleration_km_per_s2(
+                burn_segment.thrust_newtons,
+                mass_kg,
+                burn_segment.direction,
+            ),
+            dtype=float,
+        )
+        mass_flow_kg_per_s += burn_mass_flow_kg_per_s(
+            burn_segment.thrust_newtons,
+            burn_segment.isp_seconds,
+        )
+
+    return acceleration, mass_flow_kg_per_s

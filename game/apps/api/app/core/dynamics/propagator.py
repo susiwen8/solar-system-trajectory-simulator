@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Callable, List, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from app.core.dynamics.acceleration import point_mass_acceleration
+from app.core.dynamics.acceleration import finite_thrust_acceleration, point_mass_acceleration
+from app.core.dynamics.thrust import BurnSegment
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class PropagationSample:
     epoch_seconds: float
     position_km: Tuple[float, float, float]
     velocity_km_per_s: Tuple[float, float, float]
+    mass_kg: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -21,13 +23,19 @@ class PropagationResult:
 
 def propagate_state(
     *,
-    initial_state: np.ndarray,
+    initial_state: Sequence[float],
     t_span: Tuple[float, float],
     sample_step_s: float,
     acceleration_fn: Callable[[float, np.ndarray], np.ndarray],
+    burn_segments: Optional[List[BurnSegment]] = None,
     rtol: float = 1e-9,
     atol: float = 1e-9,
 ) -> PropagationResult:
+    state_vector = np.asarray(initial_state, dtype=float)
+    if state_vector.shape[0] not in (6, 7):
+        raise ValueError("initial_state must contain either 6 or 7 state elements")
+
+    active_burn_segments = burn_segments or []
     sample_times = np.arange(t_span[0], t_span[1], sample_step_s, dtype=float)
     if sample_times.size == 0 or sample_times[0] != float(t_span[0]):
         sample_times = np.insert(sample_times, 0, float(t_span[0]))
@@ -36,14 +44,30 @@ def propagate_state(
 
     def rhs(time_seconds: float, state: np.ndarray) -> np.ndarray:
         position = state[:3]
-        velocity = state[3:]
-        acceleration = acceleration_fn(time_seconds, position)
-        return np.concatenate((velocity, acceleration))
+        velocity = state[3:6]
+        acceleration = np.array(acceleration_fn(time_seconds, position), dtype=float)
+
+        if state.shape[0] == 6:
+            return np.concatenate((velocity, acceleration))
+
+        mass_kg = max(float(state[6]), 1e-9)
+        thrust_acceleration, mass_flow_kg_per_s = finite_thrust_acceleration(
+            time_seconds,
+            mass_kg=mass_kg,
+            burn_segments=active_burn_segments,
+        )
+        return np.concatenate(
+            (
+                velocity,
+                acceleration + thrust_acceleration,
+                np.array([-mass_flow_kg_per_s], dtype=float),
+            )
+        )
 
     solution = solve_ivp(
         rhs,
         t_span=t_span,
-        y0=initial_state,
+        y0=state_vector,
         method="DOP853",
         t_eval=sample_times,
         rtol=rtol,
@@ -56,7 +80,8 @@ def propagate_state(
         PropagationSample(
             epoch_seconds=float(solution.t[index]),
             position_km=tuple(float(value) for value in solution.y[:3, index]),
-            velocity_km_per_s=tuple(float(value) for value in solution.y[3:, index]),
+            velocity_km_per_s=tuple(float(value) for value in solution.y[3:6, index]),
+            mass_kg=float(solution.y[6, index]) if solution.y.shape[0] > 6 else None,
         )
         for index in range(solution.y.shape[1])
     ]

@@ -1,3 +1,5 @@
+STANDARD_GRAVITY_M_PER_S2 = 9.80665
+
 SOLAR_SYSTEM_MU_KM3_PER_S2 = {
     "sun": 132_712_440_018.0,
     "mercury": 22_032.080,
@@ -20,4 +22,11 @@ PLANETARY_BODY_RADII_KM = {
     "saturn": 58_232.0,
     "uranus": 25_362.0,
     "neptune": 24_622.0,
+}
+
+DEFAULT_PROPULSION_CONFIG = {
+    "initialMassKg": 1800.0,
+    "propellantMassKg": 420.0,
+    "maxThrustN": 0.8,
+    "ispSeconds": 3200.0,
 }
