@@ -25,6 +25,7 @@ export type MissionRequest = {
   };
   durationSeconds?: number;
   outputStepSeconds?: number;
+  propulsionConfig?: PropulsionConfig;
 };
 
 export type MissionTourRequest = {
@@ -35,12 +36,21 @@ export type MissionTourRequest = {
   maxReturnedCandidates?: number;
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
+  propulsionConfig?: PropulsionConfig;
+};
+
+export type PropulsionConfig = {
+  initialMassKg: number;
+  propellantMassKg: number;
+  maxThrustN: number;
+  ispSeconds: number;
 };
 
 export type TrajectorySample = {
   epochSeconds: number;
   positionKm: [number, number, number];
   velocityKmPerSec: [number, number, number];
+  massKg?: number;
 };
 
 export type ClosestApproach = {
@@ -65,6 +75,17 @@ export type VisitEvent = {
   positionKm: [number, number, number];
 };
 
+export type ManeuverEvent = {
+  type: string;
+  startEpoch: string;
+  durationSeconds: number;
+  thrustDirection: string;
+  deltaVEstimateKmPerS: number;
+  propellantUsedKg: number;
+  massBeforeKg: number;
+  massAfterKg: number;
+};
+
 export type MissionLeg = {
   startBody: string;
   endBody: string;
@@ -87,6 +108,10 @@ export type MissionCandidate = {
   closestApproach: ClosestApproach;
   warnings: string[];
   flybyEvents: FlybyEvent[];
+  maneuverEvents?: ManeuverEvent[];
+  finalMassKg?: number | null;
+  totalPropellantUsedKg?: number | null;
+  propulsionConfig?: PropulsionConfig | null;
 };
 
 export type TrajectoryResult = {
@@ -105,6 +130,10 @@ export type TrajectoryResult = {
   score?: number;
   deltaVKmPerS?: number;
   flybyEvents?: FlybyEvent[];
+  maneuverEvents?: ManeuverEvent[];
+  finalMassKg?: number | null;
+  totalPropellantUsedKg?: number | null;
+  propulsionConfig?: PropulsionConfig | null;
 };
 
 export type ScenePoint = {

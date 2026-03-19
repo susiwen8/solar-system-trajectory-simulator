@@ -638,6 +638,43 @@ button {
     rgba(10, 21, 36, 0.72);
 }
 
+.scene-maneuver-panel {
+  position: absolute;
+  left: 0.9rem;
+  bottom: 0.9rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.45rem;
+  min-width: 14rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(143, 227, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 18, 31, 0.82);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.scene-maneuver-panel__label {
+  font-size: 0.69rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(188, 204, 224, 0.68);
+}
+
+.scene-maneuver-panel strong,
+.scene-maneuver-panel__meta strong {
+  color: #f5f8fb;
+}
+
+.scene-maneuver-panel__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: rgba(225, 232, 240, 0.82);
+}
+
 .scene-body-list {
   display: grid;
   gap: 0.55rem;
@@ -876,6 +913,13 @@ button {
     width: calc(100% - 1.2rem);
     top: 0.6rem;
     right: 0.6rem;
+  }
+
+  .scene-maneuver-panel {
+    left: 0.6rem;
+    right: 0.6rem;
+    bottom: 0.6rem;
+    min-width: 0;
   }
 
   .scene-telemetry__metrics {

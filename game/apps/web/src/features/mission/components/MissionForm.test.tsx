@@ -25,6 +25,30 @@ it("submits a request for an Earth to Mars mission", async () => {
   );
 });
 
+it("submits propulsion settings when finite-thrust corrections are enabled", async () => {
+  const onSubmit = vi.fn();
+  render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
+
+  await userEvent.click(screen.getByLabelText("启用有限推力修正"));
+  await userEvent.clear(screen.getByLabelText("初始质量（kg）"));
+  await userEvent.type(screen.getByLabelText("初始质量（kg）"), "2000");
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "trajectory",
+      request: expect.objectContaining({
+        propulsionConfig: expect.objectContaining({
+          initialMassKg: 2000,
+          propellantMassKg: 420,
+          maxThrustN: 0.8,
+          ispSeconds: 3200,
+        }),
+      }),
+    }),
+  );
+});
+
 it("shows a disabled loading button while propagation is running", () => {
   render(<MissionForm onSubmit={vi.fn()} language="zh" loading />);
 

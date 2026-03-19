@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { planetLabel, t, type Language } from "../../../lib/i18n";
-import type { BodyState, TrajectoryResult } from "../../mission/types";
+import type { BodyState, ManeuverEvent, TrajectoryResult } from "../../mission/types";
 import { scaleDistanceKm } from "../lib/scale";
 import {
   buildSpeedTelemetry,
@@ -15,6 +15,7 @@ import { computeBirdsEyeFrame, type BirdsEyeFrame } from "../lib/view";
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
   bodies: BodyState[];
+  launchEpoch: string | null;
   currentEpoch: string | null;
   selectedSampleIndex: number;
   onSampleIndexChange: (index: number) => void;
@@ -69,6 +70,7 @@ const DEFAULT_ZOOM = 1.15;
 export default function SolarSystemScene({
   result,
   bodies,
+  launchEpoch,
   currentEpoch,
   selectedSampleIndex,
   onSampleIndexChange,
@@ -87,6 +89,8 @@ export default function SolarSystemScene({
   const [telemetryMode, setTelemetryMode] = useState<SpeedTelemetryMode>("speed");
   const copy = t(language);
   const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, telemetryMode);
+  const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
+  const upcomingManeuver = activeManeuver ? null : findUpcomingManeuver(result.maneuverEvents, currentEpoch);
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -125,8 +129,8 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncSceneObjects(runtime, bodies, result, selectedSampleIndex, hoveredBodyId, language);
-  }, [bodies, result, selectedSampleIndex, hoveredBodyId, language]);
+    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language);
+  }, [bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
@@ -203,6 +207,29 @@ export default function SolarSystemScene({
             ariaLabel={copy.speedTelemetry}
           />
         </div>
+
+        {(activeManeuver || upcomingManeuver) ? (
+          <div className="scene-maneuver-panel" aria-label={copy.maneuverEventsLabel}>
+            <span className="scene-maneuver-panel__label">
+              {activeManeuver ? copy.activeManeuver : copy.upcomingManeuver}
+            </span>
+            <strong>{(activeManeuver ?? upcomingManeuver)?.type}</strong>
+            <div className="scene-maneuver-panel__meta">
+              <span>{copy.burnDuration}</span>
+              <strong>{formatDurationSeconds((activeManeuver ?? upcomingManeuver)?.durationSeconds ?? 0)}</strong>
+            </div>
+            <div className="scene-maneuver-panel__meta">
+              <span>{copy.burnDirection}</span>
+              <strong>{(activeManeuver ?? upcomingManeuver)?.thrustDirection}</strong>
+            </div>
+            {(activeManeuver ?? upcomingManeuver)?.massAfterKg != null ? (
+              <div className="scene-maneuver-panel__meta">
+                <span>{copy.remainingMass}</span>
+                <strong>{formatMassKg((activeManeuver ?? upcomingManeuver)?.massAfterKg ?? 0)}</strong>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="scene-body-list scene-body-list--inline" aria-label={copy.visibleBodies}>
@@ -284,6 +311,12 @@ export default function SolarSystemScene({
             <div>
               <span>{copy.visitEventsLabel}</span>
               <strong>{result.visitEvents.length}</strong>
+            </div>
+          ) : null}
+          {result.maneuverEvents?.length ? (
+            <div>
+              <span>{copy.maneuverEventsLabel}</span>
+              <strong>{result.maneuverEvents.length}</strong>
             </div>
           ) : null}
           <div>
@@ -435,6 +468,7 @@ function syncSceneObjects(
   runtime: SceneRuntime,
   bodies: BodyState[],
   result: TrajectoryResult,
+  launchEpoch: string | null,
   selectedSampleIndex: number,
   hoveredBodyId: string | null,
   language: Language
@@ -459,6 +493,14 @@ function syncSceneObjects(
   for (const visitEvent of result.visitEvents ?? []) {
     runtime.dynamicGroup.add(createVisitMarker(visitEvent.positionKm, visitEvent.bodyId, language));
   }
+  if (launchEpoch) {
+    for (const maneuverEvent of result.maneuverEvents ?? []) {
+      const maneuverSample = findSampleForEventEpoch(result, launchEpoch, maneuverEvent.startEpoch);
+      if (maneuverSample) {
+        runtime.dynamicGroup.add(createManeuverMarker(maneuverSample.positionKm, maneuverEvent.type, language));
+      }
+    }
+  }
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
   runtime.dynamicGroup.add(createTrajectoryMarkers(result.samples.slice(0, selectedSampleIndex + 1)));
@@ -473,6 +515,22 @@ function syncSceneObjects(
 
 function findSampleForEpoch(result: TrajectoryResult, epochSeconds: number) {
   return result.samples.find((sample) => sample.epochSeconds === epochSeconds);
+}
+
+function findSampleForEventEpoch(
+  result: TrajectoryResult,
+  launchEpoch: string,
+  eventEpoch: string,
+) {
+  const offsetSeconds = (new Date(eventEpoch).getTime() - new Date(launchEpoch).getTime()) / 1000;
+  return result.samples.reduce<TrajectoryResult["samples"][number] | undefined>((closest, sample) => {
+    if (!closest) {
+      return sample;
+    }
+    const currentDistance = Math.abs(sample.epochSeconds - offsetSeconds);
+    const bestDistance = Math.abs(closest.epochSeconds - offsetSeconds);
+    return currentDistance < bestDistance ? sample : closest;
+  }, undefined);
 }
 
 function clearGroup(group: THREE.Group) {
@@ -693,6 +751,48 @@ function createVisitMarker(
   return group;
 }
 
+function createManeuverMarker(
+  positionKm: [number, number, number],
+  maneuverType: string,
+  language: Language,
+) {
+  const group = new THREE.Group();
+  group.position.copy(toThreeVector(positionKm));
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(7.4, 9.6, 52),
+    new THREE.MeshBasicMaterial({
+      color: "#8fe3ff",
+      transparent: true,
+      opacity: 0.52,
+      side: THREE.DoubleSide,
+    }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  group.add(ring);
+
+  const core = new THREE.Mesh(
+    new THREE.OctahedronGeometry(2.4, 0),
+    new THREE.MeshStandardMaterial({
+      color: "#f7bf66",
+      emissive: "#f7bf66",
+      emissiveIntensity: 0.48,
+      metalness: 0.12,
+      roughness: 0.56,
+    }),
+  );
+  core.position.y = 0.4;
+  group.add(core);
+
+  const label = createAnchorLabel(
+    `${maneuverType} ${t(language).maneuverEventsLabel}`,
+    new THREE.Color("#8fe3ff"),
+  );
+  label.position.set(0, 0.8, 18);
+  group.add(label);
+  return group;
+}
+
 function toThreeVector(positionKm: [number, number, number]) {
   return new THREE.Vector3(
     scaleDistanceKm(positionKm[0]) * 1.8,
@@ -703,6 +803,48 @@ function toThreeVector(positionKm: [number, number, number]) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function formatDurationSeconds(seconds: number) {
+  if (seconds >= 3600) {
+    return `${(seconds / 3600).toFixed(1)} h`;
+  }
+  if (seconds >= 60) {
+    return `${Math.round(seconds / 60)} min`;
+  }
+  return `${Math.round(seconds)} s`;
+}
+
+function formatMassKg(value: number) {
+  return `${value.toFixed(1)} kg`;
+}
+
+function findActiveManeuver(maneuverEvents: ManeuverEvent[] | undefined, currentEpoch: string | null) {
+  if (!maneuverEvents?.length || !currentEpoch) {
+    return null;
+  }
+
+  const currentTimeMs = new Date(currentEpoch).getTime();
+  return (
+    maneuverEvents.find((event) => {
+      const startMs = new Date(event.startEpoch).getTime();
+      const endMs = startMs + event.durationSeconds * 1000;
+      return currentTimeMs >= startMs && currentTimeMs <= endMs;
+    }) ?? null
+  );
+}
+
+function findUpcomingManeuver(maneuverEvents: ManeuverEvent[] | undefined, currentEpoch: string | null) {
+  if (!maneuverEvents?.length || !currentEpoch) {
+    return null;
+  }
+
+  const currentTimeMs = new Date(currentEpoch).getTime();
+  return (
+    maneuverEvents
+      .filter((event) => new Date(event.startEpoch).getTime() > currentTimeMs)
+      .sort((left, right) => new Date(left.startEpoch).getTime() - new Date(right.startEpoch).getTime())[0] ?? null
+  );
 }
 
 function createAnchorLabel(text: string, color: THREE.Color) {

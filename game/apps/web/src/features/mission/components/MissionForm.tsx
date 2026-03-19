@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { planetLabel, t, type Language } from "../../../lib/i18n";
-import type { BodyId, MissionRequest, MissionTourRequest } from "../types";
+import type { BodyId, MissionRequest, MissionTourRequest, PropulsionConfig } from "../types";
 
 export type MissionSubmission =
   | {
@@ -41,6 +41,13 @@ const defaultTourRequest: MissionTourRequest = {
   maxReturnedCandidates: 5,
   allowAssistBodies: true,
   allowRepeatedFlybys: true,
+};
+
+const defaultPropulsionConfig: PropulsionConfig = {
+  initialMassKg: 1800,
+  propellantMassKg: 420,
+  maxThrustN: 0.8,
+  ispSeconds: 3200,
 };
 
 export default function MissionForm({ onSubmit, language, loading }: MissionFormProps) {
@@ -148,6 +155,40 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
       requiredVisitBodies: current.requiredVisitBodies.filter((planet) => planet !== bodyId),
     }));
     setPendingVisitBody(bodyId);
+  }
+
+  function toggleTrajectoryPropulsion(enabled: boolean) {
+    setTrajectoryRequest((current) => ({
+      ...current,
+      propulsionConfig: enabled ? current.propulsionConfig ?? defaultPropulsionConfig : undefined,
+    }));
+  }
+
+  function toggleTourPropulsion(enabled: boolean) {
+    setTourRequest((current) => ({
+      ...current,
+      propulsionConfig: enabled ? current.propulsionConfig ?? defaultPropulsionConfig : undefined,
+    }));
+  }
+
+  function updateTrajectoryPropulsion<K extends keyof PropulsionConfig>(key: K, value: number) {
+    setTrajectoryRequest((current) => ({
+      ...current,
+      propulsionConfig: {
+        ...(current.propulsionConfig ?? defaultPropulsionConfig),
+        [key]: value,
+      },
+    }));
+  }
+
+  function updateTourPropulsion<K extends keyof PropulsionConfig>(key: K, value: number) {
+    setTourRequest((current) => ({
+      ...current,
+      propulsionConfig: {
+        ...(current.propulsionConfig ?? defaultPropulsionConfig),
+        [key]: value,
+      },
+    }));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -289,6 +330,66 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
                   <p>{copy.autoTransferBody}</p>
                 </div>
               )}
+
+              <div className="summary-card summary-card--placeholder">
+                <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>
+                <p>{copy.propulsionHint}</p>
+                <label className="mission-field mission-field--checkbox">
+                  <span>{copy.enableFiniteThrust}</span>
+                  <input
+                    aria-label={copy.enableFiniteThrust}
+                    type="checkbox"
+                    checked={trajectoryRequest.propulsionConfig != null}
+                    disabled={loading}
+                    onChange={(event) => toggleTrajectoryPropulsion(event.target.checked)}
+                  />
+                </label>
+                {trajectoryRequest.propulsionConfig ? (
+                  <div className="mission-form__grid mission-form__grid--two">
+                    <label className="mission-field">
+                      <span>{copy.initialMass}</span>
+                      <input
+                        aria-label={copy.initialMass}
+                        type="number"
+                        value={trajectoryRequest.propulsionConfig.initialMassKg}
+                        disabled={loading}
+                        onChange={(event) => updateTrajectoryPropulsion("initialMassKg", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.propellantMass}</span>
+                      <input
+                        aria-label={copy.propellantMass}
+                        type="number"
+                        value={trajectoryRequest.propulsionConfig.propellantMassKg}
+                        disabled={loading}
+                        onChange={(event) => updateTrajectoryPropulsion("propellantMassKg", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.maxThrust}</span>
+                      <input
+                        aria-label={copy.maxThrust}
+                        type="number"
+                        step="0.1"
+                        value={trajectoryRequest.propulsionConfig.maxThrustN}
+                        disabled={loading}
+                        onChange={(event) => updateTrajectoryPropulsion("maxThrustN", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.ispSeconds}</span>
+                      <input
+                        aria-label={copy.ispSeconds}
+                        type="number"
+                        value={trajectoryRequest.propulsionConfig.ispSeconds}
+                        disabled={loading}
+                        onChange={(event) => updateTrajectoryPropulsion("ispSeconds", Number(event.target.value))}
+                      />
+                    </label>
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : (
             <>
@@ -422,6 +523,66 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
                     }
                   />
                 </label>
+              </div>
+
+              <div className="summary-card summary-card--placeholder">
+                <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>
+                <p>{copy.propulsionHint}</p>
+                <label className="mission-field mission-field--checkbox">
+                  <span>{copy.enableFiniteThrust}</span>
+                  <input
+                    aria-label={copy.enableFiniteThrust}
+                    type="checkbox"
+                    checked={tourRequest.propulsionConfig != null}
+                    disabled={loading}
+                    onChange={(event) => toggleTourPropulsion(event.target.checked)}
+                  />
+                </label>
+                {tourRequest.propulsionConfig ? (
+                  <div className="mission-form__grid mission-form__grid--two">
+                    <label className="mission-field">
+                      <span>{copy.initialMass}</span>
+                      <input
+                        aria-label={copy.initialMass}
+                        type="number"
+                        value={tourRequest.propulsionConfig.initialMassKg}
+                        disabled={loading}
+                        onChange={(event) => updateTourPropulsion("initialMassKg", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.propellantMass}</span>
+                      <input
+                        aria-label={copy.propellantMass}
+                        type="number"
+                        value={tourRequest.propulsionConfig.propellantMassKg}
+                        disabled={loading}
+                        onChange={(event) => updateTourPropulsion("propellantMassKg", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.maxThrust}</span>
+                      <input
+                        aria-label={copy.maxThrust}
+                        type="number"
+                        step="0.1"
+                        value={tourRequest.propulsionConfig.maxThrustN}
+                        disabled={loading}
+                        onChange={(event) => updateTourPropulsion("maxThrustN", Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="mission-field">
+                      <span>{copy.ispSeconds}</span>
+                      <input
+                        aria-label={copy.ispSeconds}
+                        type="number"
+                        value={tourRequest.propulsionConfig.ispSeconds}
+                        disabled={loading}
+                        onChange={(event) => updateTourPropulsion("ispSeconds", Number(event.target.value))}
+                      />
+                    </label>
+                  </div>
+                ) : null}
               </div>
             </>
           )}

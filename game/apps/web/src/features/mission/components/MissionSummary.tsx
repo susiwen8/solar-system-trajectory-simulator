@@ -43,6 +43,24 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
           <span className="summary-metric__label">{copy.ephemeris}</span>
           <strong>{result.ephemerisSource}</strong>
         </article>
+        {result.totalPropellantUsedKg != null ? (
+          <article className="summary-metric">
+            <span className="summary-metric__label">{copy.propellantUsed}</span>
+            <strong>{formatNumber(result.totalPropellantUsedKg)} kg</strong>
+          </article>
+        ) : null}
+        {result.finalMassKg != null ? (
+          <article className="summary-metric">
+            <span className="summary-metric__label">{copy.finalMass}</span>
+            <strong>{formatNumber(result.finalMassKg)} kg</strong>
+          </article>
+        ) : null}
+        {result.maneuverEvents?.length ? (
+          <article className="summary-metric">
+            <span className="summary-metric__label">{copy.maneuverCount}</span>
+            <strong>{result.maneuverEvents.length}</strong>
+          </article>
+        ) : null}
       </div>
 
       {result.warnings.length > 0 ? (

@@ -19,6 +19,20 @@ const result = {
   },
   flightTimeSeconds: 259200,
   warnings: [],
+  maneuverEvents: [
+    {
+      type: "TCM",
+      startEpoch: "2026-01-02T00:00:00.000Z",
+      durationSeconds: 3600,
+      thrustDirection: "prograde",
+      deltaVEstimateKmPerS: 0.002,
+      propellantUsedKg: 1.2,
+      massBeforeKg: 1800,
+      massAfterKg: 1798.8,
+    },
+  ],
+  finalMassKg: 1798.8,
+  totalPropellantUsedKg: 1.2,
 };
 
 describe("MissionSummary", () => {
@@ -32,5 +46,13 @@ describe("MissionSummary", () => {
     render(<MissionSummary result={result} language="zh" />);
 
     expect(screen.getByText("3 天")).toBeInTheDocument();
+  });
+
+  it("renders propellant usage and final mass", () => {
+    render(<MissionSummary result={result} language="zh" />);
+
+    expect(screen.getByText("推进剂消耗")).toBeInTheDocument();
+    expect(screen.getByText("最终质量")).toBeInTheDocument();
+    expect(screen.getByText("机动次数")).toBeInTheDocument();
   });
 });

@@ -233,6 +233,7 @@ export default function App() {
           <SolarSystemScene
             result={activeResult}
             bodies={bodies}
+            launchEpoch={launchEpoch}
             currentEpoch={currentEpoch}
             selectedSampleIndex={selectedSampleIndex}
             onSampleIndexChange={setSelectedSampleIndex}
@@ -291,6 +292,10 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
     score: candidate.score,
     deltaVKmPerS: candidate.deltaVKmPerS,
     flybyEvents: candidate.flybyEvents,
+    maneuverEvents: candidate.maneuverEvents ?? result.maneuverEvents,
+    finalMassKg: candidate.finalMassKg ?? result.finalMassKg,
+    totalPropellantUsedKg: candidate.totalPropellantUsedKg ?? result.totalPropellantUsedKg,
+    propulsionConfig: candidate.propulsionConfig ?? result.propulsionConfig,
   };
 }
 

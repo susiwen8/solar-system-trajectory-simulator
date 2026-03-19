@@ -556,3 +556,149 @@ it("shows speed telemetry in the scene and switches components", async () => {
   expect(await screen.findByText("当前速度分量")).toBeInTheDocument();
   expect(await screen.findByText("0.00 km/s")).toBeInTheDocument();
 });
+
+it("renders maneuver markers and highlights active burn windows during playback", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          samples: [
+            {
+              epochSeconds: 0,
+              positionKm: [149597870.7, 0, 0],
+              velocityKmPerSec: [0, 29.78, 0],
+              massKg: 1800,
+            },
+            {
+              epochSeconds: 3600,
+              positionKm: [149597000, 107208, 0],
+              velocityKmPerSec: [0.02, 29.79, 0],
+              massKg: 1799.4,
+            }
+          ],
+          closestApproach: {
+            bodyId: "mars",
+            distanceKm: 8450000,
+            epochSeconds: 3600
+          },
+          ephemerisSource: "bundled-keplerian",
+          flightTimeSeconds: 259200,
+          warnings: [],
+          maneuverEvents: [
+            {
+              type: "TCM",
+              startEpoch: "2026-01-01T01:00:00.000Z",
+              durationSeconds: 7200,
+              thrustDirection: "prograde",
+              deltaVEstimateKmPerS: 0.002,
+              propellantUsedKg: 0.6,
+              massBeforeKg: 1800,
+              massAfterKg: 1799.4
+            }
+          ],
+          finalMassKg: 1799.4,
+          totalPropellantUsedKg: 0.6
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T00:00:00.000Z",
+          ephemerisSource: "bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [-24856124, 144936962, 0],
+              velocityKmPerSec: [-29.837, -5.127, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "mars",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [-159185432, 188245763, 7650983],
+              velocityKmPerSec: [-17.235, -13.254, 0.156],
+              muKm3PerS2: 42828.375816,
+              sourceName: "bundled-ephemeris"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T01:00:00.000Z",
+          ephemerisSource: "bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T01:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T01:00:00.000Z",
+              positionKm: [-24850000, 144930000, 0],
+              velocityKmPerSec: [-29.837, -5.127, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "mars",
+              epoch: "2026-01-01T01:00:00.000Z",
+              positionKm: [-159180000, 188240000, 7651000],
+              velocityKmPerSec: [-17.235, -13.254, 0.156],
+              muKm3PerS2: 42828.375816,
+              sourceName: "bundled-ephemeris"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    );
+
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(await screen.findByText("机动事件")).toBeInTheDocument();
+  expect(await screen.findByText("下一次机动")).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("回放步进"), { target: { value: "1" } });
+
+  expect(await screen.findByText("当前机动")).toBeInTheDocument();
+  expect(await screen.findByText("TCM")).toBeInTheDocument();
+});
