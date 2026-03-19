@@ -214,6 +214,11 @@ button {
   color: #f5f8fb;
 }
 
+.scene-shell__target-card small {
+  color: rgba(225, 232, 240, 0.72);
+  font-size: 0.75rem;
+}
+
 .alert-card,
 .loading-copy,
 .summary-card,

@@ -115,6 +115,7 @@ export default function SolarSystemScene({
     selectedSampleIndex,
     flybyEvents: result.flybyEvents ?? [],
   });
+  const focusBodyId = cameraView?.focusBodyId ?? result.closestApproach.bodyId;
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -153,8 +154,8 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, activeSegment, zoomLevel);
-  }, [activeSegment, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, zoomLevel]);
+    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel);
+  }, [bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
@@ -177,6 +178,12 @@ export default function SolarSystemScene({
         <div className="scene-shell__target-card">
           <span>{copy.targetLabel}</span>
           <strong>{planetLabel(language, result.closestApproach.bodyId)}</strong>
+        </div>
+
+        <div className="scene-shell__target-card" data-testid="scene-focus-card">
+          <span>{copy.visualFocus}</span>
+          <strong>{planetLabel(language, focusBodyId)}</strong>
+          <small>{formatProbeViewMode(cameraView?.mode ?? "cruise-follow", language)}</small>
         </div>
       </div>
 
@@ -601,20 +608,15 @@ function syncSceneObjects(
   selectedSampleIndex: number,
   hoveredBodyId: string | null,
   language: Language,
-  activeSegment: MissionSegment | null,
+  cameraView: ProbeCameraView | null,
   zoomLevel: number,
 ) {
   clearGroup(runtime.dynamicGroup);
   const activeSample = result.samples[Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0))] ?? result.samples[0];
-  if (activeSample) {
+  if (activeSample && cameraView) {
     runtime.setView(
       activeSample.positionKm,
-      computeProbeCameraView({
-        sample: activeSample,
-        bodies,
-        closestApproach: result.closestApproach,
-        activeSegment,
-      }),
+      cameraView,
       zoomLevel,
     );
   }
@@ -647,10 +649,21 @@ function syncSceneObjects(
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
   runtime.dynamicGroup.add(createTrajectoryMarkers(result.samples.slice(0, selectedSampleIndex + 1)));
-  runtime.dynamicGroup.add(createProbeMarker(activeSample));
+  runtime.dynamicGroup.add(createProbeMarker(activeSample, cameraView));
+
+  if (activeSample && cameraView) {
+    runtime.dynamicGroup.add(createLocalMotionStreaks(activeSample, cameraView.mode));
+  }
 
   for (const body of bodies) {
-    runtime.dynamicGroup.add(createBodyMesh(body, hoveredBodyId === body.bodyId, body.bodyId === activeSegment?.metadata?.bodyId || body.bodyId === result.closestApproach.bodyId));
+    runtime.dynamicGroup.add(
+      createBodyMesh(
+        body,
+        hoveredBodyId === body.bodyId,
+        body.bodyId === cameraView?.focusBodyId || body.bodyId === result.closestApproach.bodyId,
+        body.bodyId === cameraView?.focusBodyId ? cameraView.focusBodyScale : 1,
+      ),
+    );
   }
 
   runtime.render();
@@ -712,18 +725,75 @@ function createTrajectoryMarkers(samples: TrajectoryResult["samples"]) {
   return new THREE.Points(geometry, material);
 }
 
-function createProbeMarker(sample: TrajectoryResult["samples"][number] | undefined) {
-  const geometry = new THREE.SphereGeometry(1.6, 20, 20);
-  const material = new THREE.MeshStandardMaterial({
-    color: "#8fe3ff",
-    emissive: "#54d2ff",
-    emissiveIntensity: 1.1,
+function createProbeMarker(
+  sample: TrajectoryResult["samples"][number] | undefined,
+  cameraView: ProbeCameraView | null,
+) {
+  const group = new THREE.Group();
+
+  const bus = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.75, 0.95, 4.4, 12),
+    new THREE.MeshStandardMaterial({
+      color: "#c8d6e8",
+      emissive: "#8fe3ff",
+      emissiveIntensity: 0.28,
+      metalness: 0.52,
+      roughness: 0.46,
+    }),
+  );
+  bus.rotation.z = Math.PI / 2;
+  group.add(bus);
+
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(1.35, 18, 18, 0, Math.PI),
+    new THREE.MeshStandardMaterial({
+      color: "#edf4fb",
+      emissive: "#69bfff",
+      emissiveIntensity: 0.15,
+      metalness: 0.1,
+      roughness: 0.28,
+      side: THREE.DoubleSide,
+    }),
+  );
+  dish.position.x = -2.2;
+  dish.rotation.z = -Math.PI / 2;
+  group.add(dish);
+
+  const panelMaterial = new THREE.MeshStandardMaterial({
+    color: "#4e86c8",
+    emissive: "#1b4576",
+    emissiveIntensity: 0.48,
+    metalness: 0.28,
+    roughness: 0.42,
   });
-  const mesh = new THREE.Mesh(geometry, material);
+  const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 4.8), panelMaterial);
+  leftPanel.position.set(0, 0, 3.6);
+  group.add(leftPanel);
+  const rightPanel = leftPanel.clone();
+  rightPanel.position.set(0, 0, -3.6);
+  group.add(rightPanel);
+
+  const engineGlow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.6, 1.8, 18),
+    new THREE.MeshStandardMaterial({
+      color: "#f7bf66",
+      emissive: "#f7bf66",
+      emissiveIntensity: cameraView?.mode === "flyby-emphasis" ? 1.15 : 0.72,
+      transparent: true,
+      opacity: 0.92,
+    }),
+  );
+  engineGlow.position.x = 2.6;
+  engineGlow.rotation.z = -Math.PI / 2;
+  group.add(engineGlow);
+
   if (sample) {
-    mesh.position.copy(toThreeVector(sample.positionKm));
+    group.position.copy(toThreeVector(sample.positionKm));
+    const forward = toThreeDirection(sample.velocityKmPerSec);
+    group.lookAt(group.position.clone().add(forward));
   }
-  return mesh;
+
+  return group;
 }
 
 function createAnchorMesh(
@@ -787,7 +857,7 @@ function createAnchorMesh(
   return group;
 }
 
-function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean) {
+function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
   const radius = bodyRadii[body.bodyId] ?? 1.8;
   const group = new THREE.Group();
   const geometry = new THREE.SphereGeometry(radius, 24, 24);
@@ -813,9 +883,50 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: bo
   group.position.copy(toThreeVector(body.positionKm));
   group.add(orbitMarker);
   group.add(mesh);
-  if (isHighlighted || isFocusBody) {
-    group.scale.setScalar(isFocusBody ? 2.2 : 1.2);
+  if (isFocusBody && body.bodyId !== "sun") {
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * 1.2, 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: bodyColors[body.bodyId] ?? "#f5f3ed",
+        transparent: true,
+        opacity: 0.12,
+        side: THREE.DoubleSide,
+      }),
+    );
+    group.add(halo);
   }
+  if (isHighlighted || isFocusBody) {
+    group.scale.setScalar(isFocusBody ? focusScale : 1.2);
+  }
+  return group;
+}
+
+function createLocalMotionStreaks(
+  sample: TrajectoryResult["samples"][number],
+  mode: ProbeCameraView["mode"],
+) {
+  const group = new THREE.Group();
+  const probePosition = toThreeVector(sample.positionKm);
+  const forward = toThreeDirection(sample.velocityKmPerSec);
+  const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+  const streakCount = mode === "flyby-emphasis" ? 10 : 6;
+
+  for (let index = 0; index < streakCount; index += 1) {
+    const offset = (index - (streakCount - 1) / 2) * 1.8;
+    const start = probePosition
+      .clone()
+      .add(forward.clone().multiplyScalar(4 + index * 0.8))
+      .add(right.clone().multiplyScalar(offset));
+    const end = start.clone().add(forward.clone().multiplyScalar(5 + index * 0.6));
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({
+      color: "#8fe3ff",
+      transparent: true,
+      opacity: mode === "flyby-emphasis" ? 0.34 : 0.18,
+    });
+    group.add(new THREE.Line(geometry, material));
+  }
+
   return group;
 }
 

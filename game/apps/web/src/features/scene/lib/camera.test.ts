@@ -48,6 +48,7 @@ describe("computeProbeCameraView", () => {
     expect(view.focusBodyId).toBe("mars");
     expect(view.fovDeg).toBeGreaterThan(45);
     expect(view.cameraOffsetKm[1]).toBeGreaterThan(0);
+    expect(view.focusBodyScale).toBe(1);
   });
 
   it("switches to approach framing near the target body", () => {
@@ -64,6 +65,7 @@ describe("computeProbeCameraView", () => {
     expect(view.mode).toBe("approach-emphasis");
     expect(view.focusBodyId).toBe("mars");
     expect(view.fovDeg).toBeLessThan(52);
+    expect(view.focusBodyScale).toBeGreaterThan(1);
   });
 
   it("switches to flyby framing for gravity-assist segments", () => {
@@ -107,6 +109,7 @@ describe("computeProbeCameraView", () => {
     expect(view.mode).toBe("flyby-emphasis");
     expect(view.focusBodyId).toBe("jupiter");
     expect(view.fovDeg).toBeLessThan(45);
-    expect(view.cameraOffsetKm[2]).toBeGreaterThanOrEqual(0);
+    expect(view.cameraOffsetKm[2]).toBeGreaterThan(0);
+    expect(view.focusBodyScale).toBeGreaterThan(2);
   });
 });

@@ -7,6 +7,7 @@ export type ProbeCameraView = {
   lookDirection: [number, number, number];
   cameraOffsetKm: [number, number, number];
   fovDeg: number;
+  focusBodyScale: number;
 };
 
 export type ComputeProbeCameraViewInput = {
@@ -25,8 +26,9 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
       mode: proximity.mode,
       focusBodyId: proximity.focusBodyId,
       lookDirection,
-      cameraOffsetKm: [-12_000, 4_000, 0],
+      cameraOffsetKm: [-12_000, 4_000, 7_500],
       fovDeg: 38,
+      focusBodyScale: 2.8,
     };
   }
 
@@ -37,6 +39,7 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
       lookDirection,
       cameraOffsetKm: [-18_000, 6_000, 0],
       fovDeg: 48,
+      focusBodyScale: 1.8,
     };
   }
 
@@ -46,6 +49,7 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
     lookDirection,
     cameraOffsetKm: [-32_000, 10_000, 0],
     fovDeg: 58,
+    focusBodyScale: 1,
   };
 }
 
