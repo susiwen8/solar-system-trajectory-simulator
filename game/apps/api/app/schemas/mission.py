@@ -23,6 +23,30 @@ class InitialStateInput(BaseModel):
         return self
 
 
+class PropulsionConfig(BaseModel):
+    initialMassKg: float = Field(gt=0)
+    propellantMassKg: float = Field(ge=0)
+    maxThrustN: float = Field(gt=0)
+    ispSeconds: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_propellant_budget(self) -> "PropulsionConfig":
+        if self.propellantMassKg >= self.initialMassKg:
+            raise ValueError("propellantMassKg must be less than initialMassKg")
+        return self
+
+
+class ManeuverEvent(BaseModel):
+    type: str = Field(min_length=1)
+    startEpoch: str = Field(min_length=1)
+    durationSeconds: float = Field(ge=0)
+    thrustDirection: str = Field(min_length=1)
+    deltaVEstimateKmPerS: float = Field(ge=0)
+    propellantUsedKg: float = Field(ge=0)
+    massBeforeKg: float = Field(gt=0)
+    massAfterKg: float = Field(gt=0)
+
+
 class MissionRequest(BaseModel):
     departureBody: str = Field(min_length=1)
     targetBody: str = Field(min_length=1)
@@ -30,6 +54,7 @@ class MissionRequest(BaseModel):
     initialState: InitialStateInput
     durationSeconds: Optional[float] = Field(default=None, gt=0)
     outputStepSeconds: Optional[float] = Field(default=None, gt=0)
+    propulsionConfig: Optional[PropulsionConfig] = None
 
 
 class MissionTourRequest(BaseModel):
@@ -40,6 +65,7 @@ class MissionTourRequest(BaseModel):
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
     allowAssistBodies: bool = True
     allowRepeatedFlybys: bool = True
+    propulsionConfig: Optional[PropulsionConfig] = None
 
     @model_validator(mode="after")
     def validate_required_visit_bodies(self) -> "MissionTourRequest":

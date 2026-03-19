@@ -77,3 +77,32 @@ def test_propagate_returns_ranked_gravity_assist_candidates_for_outer_planets() 
     assert data["flybyEvents"]
     assert "jupiter" in data["sequenceBodies"]
     assert data["closestApproach"]["distanceKm"] < 5_000.0
+
+
+def test_propagate_returns_propulsion_fields_when_maneuvers_enabled() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/missions/propagate",
+        json={
+            "departureBody": "earth",
+            "targetBody": "mars",
+            "launchEpoch": "2026-01-01T00:00:00Z",
+            "initialState": {
+                "launchFromBody": {
+                    "mode": "autoTransfer"
+                }
+            },
+            "propulsionConfig": {
+                "initialMassKg": 1800,
+                "propellantMassKg": 420,
+                "maxThrustN": 0.8,
+                "ispSeconds": 3200,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "maneuverEvents" in data
+    assert "finalMassKg" in data
+    assert "totalPropellantUsedKg" in data
