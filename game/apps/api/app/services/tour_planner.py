@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from app.schemas.mission import PropulsionConfig
 from app.services.gravity_assist_search import GravityAssistCandidate, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
+from app.services.mission_timeline import build_mission_timeline
 
 @dataclass(frozen=True)
 class TourLeg:
@@ -58,6 +59,7 @@ class MissionTourCandidate:
     final_mass_kg: Optional[float] = None
     total_propellant_used_kg: Optional[float] = None
     propulsion_config: Optional[Dict[str, float]] = None
+    mission_timeline: Optional[Dict[str, object]] = None
 
     def to_dict(self) -> Dict[str, object]:
         payload = {
@@ -81,6 +83,8 @@ class MissionTourCandidate:
             payload["totalPropellantUsedKg"] = self.total_propellant_used_kg
         if self.propulsion_config is not None:
             payload["propulsionConfig"] = self.propulsion_config
+        if self.mission_timeline is not None:
+            payload["missionTimeline"] = self.mission_timeline
         return payload
 
 
@@ -329,6 +333,24 @@ class MissionTourPlanner:
             final_mass_kg=final_mass_kg,
             total_propellant_used_kg=total_propellant_used_kg,
             propulsion_config=propulsion_payload,
+            mission_timeline=build_mission_timeline(
+                launch_epoch=launch_epoch,
+                flight_time_seconds=epoch_offset,
+                target_body=visit_order[-1],
+                samples=samples,
+                closest_approach=_materialize_closest_approach_epoch(
+                    launch_epoch,
+                    {
+                        "bodyId": visit_order[-1],
+                        "distanceKm": float(legs[-1].closest_approach_km),
+                        "epochSeconds": float(epoch_offset),
+                    },
+                ),
+                maneuver_events=list(maneuver_events) if maneuver_events is not None else None,
+                flyby_events=flyby_events,
+                visit_events=[event.to_dict() for event in visit_events],
+                departure_body=departure_body,
+            ),
         )
 
 
@@ -336,3 +358,10 @@ def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
     start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)
     shifted = start + timedelta(seconds=offset_seconds)
     return shifted.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _materialize_closest_approach_epoch(base_epoch: str, closest_approach: Dict[str, object]) -> Dict[str, object]:
+    payload = dict(closest_approach)
+    if "epochSeconds" in payload and "epoch" not in payload:
+        payload["epoch"] = _epoch_with_offset(base_epoch, float(payload["epochSeconds"]))
+    return payload

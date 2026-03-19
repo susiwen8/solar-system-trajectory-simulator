@@ -11,6 +11,7 @@ from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
+from app.services.mission_timeline import build_mission_timeline
 from app.services.transfer_planner import TransferPlanner
 
 
@@ -31,6 +32,7 @@ class MissionPropagationResult:
     final_mass_kg: Optional[float] = None
     total_propellant_used_kg: Optional[float] = None
     propulsion_config: Optional[Dict[str, float]] = None
+    mission_timeline: Optional[Dict[str, object]] = None
 
     def to_dict(self) -> Dict[str, object]:
         payload = {
@@ -59,6 +61,8 @@ class MissionPropagationResult:
             payload["totalPropellantUsedKg"] = self.total_propellant_used_kg
         if self.propulsion_config is not None:
             payload["propulsionConfig"] = self.propulsion_config
+        if self.mission_timeline is not None:
+            payload["missionTimeline"] = self.mission_timeline
         return payload
 
 
@@ -96,6 +100,15 @@ class MissionService:
                     score=best_candidate.score,
                     delta_v_km_per_s=best_candidate.delta_v_km_per_s,
                     flyby_events=[event.to_dict() for event in best_candidate.flyby_events],
+                    mission_timeline=build_mission_timeline(
+                        launch_epoch=request.launchEpoch,
+                        flight_time_seconds=best_candidate.total_flight_time_seconds,
+                        target_body=request.targetBody,
+                        samples=best_candidate.samples,
+                        closest_approach=_materialize_closest_approach_epoch(request.launchEpoch, best_candidate.closest_approach),
+                        flyby_events=[event.to_dict() for event in best_candidate.flyby_events],
+                        departure_body=request.departureBody,
+                    ),
                 )
 
         if request.initialState.stateVector is not None:
@@ -208,6 +221,15 @@ class MissionService:
             final_mass_kg=final_mass_kg,
             total_propellant_used_kg=total_propellant_used_kg,
             propulsion_config=propulsion_config_payload,
+            mission_timeline=build_mission_timeline(
+                launch_epoch=request.launchEpoch,
+                flight_time_seconds=duration_seconds,
+                target_body=request.targetBody,
+                samples=samples,
+                closest_approach=_materialize_closest_approach_epoch(request.launchEpoch, closest_approach),
+                maneuver_events=maneuver_events,
+                departure_body=request.departureBody,
+            ),
         )
 
     def _serialize_samples(self, propagation: PropagationResult) -> List[Dict[str, object]]:
@@ -258,3 +280,13 @@ def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
     start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)
     shifted = start + timedelta(seconds=offset_seconds)
     return shifted.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _materialize_closest_approach_epoch(
+    base_epoch: str,
+    closest_approach: Dict[str, Union[float, str]],
+) -> Dict[str, Union[float, str]]:
+    payload = dict(closest_approach)
+    if "epochSeconds" in payload and "epoch" not in payload:
+        payload["epoch"] = _epoch_with_offset(base_epoch, float(payload["epochSeconds"]))
+    return payload

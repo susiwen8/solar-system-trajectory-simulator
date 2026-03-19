@@ -47,6 +47,34 @@ class ManeuverEvent(BaseModel):
     massAfterKg: float = Field(gt=0)
 
 
+class MissionTimelineEvent(BaseModel):
+    id: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    epoch: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    relatedBody: Optional[str] = None
+
+
+class MissionPhase(BaseModel):
+    id: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    startEpoch: str = Field(min_length=1)
+    endEpoch: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    relatedBody: Optional[str] = None
+    eventIds: List[str] = Field(default_factory=list)
+
+
+class MissionTimeline(BaseModel):
+    events: List[MissionTimelineEvent] = Field(default_factory=list)
+    phases: List[MissionPhase] = Field(default_factory=list)
+    currentObjective: Optional[str] = None
+    missionStartEpoch: str = Field(min_length=1)
+    missionEndEpoch: str = Field(min_length=1)
+
+
 class MissionRequest(BaseModel):
     departureBody: str = Field(min_length=1)
     targetBody: str = Field(min_length=1)

@@ -296,6 +296,7 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
     finalMassKg: candidate.finalMassKg ?? result.finalMassKg,
     totalPropellantUsedKg: candidate.totalPropellantUsedKg ?? result.totalPropellantUsedKg,
     propulsionConfig: candidate.propulsionConfig ?? result.propulsionConfig,
+    missionTimeline: candidate.missionTimeline ?? result.missionTimeline,
   };
 }
 

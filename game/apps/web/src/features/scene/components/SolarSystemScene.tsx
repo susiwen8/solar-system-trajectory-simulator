@@ -3,6 +3,7 @@ import * as THREE from "three";
 
 import { planetLabel, t, type Language } from "../../../lib/i18n";
 import type { BodyState, ManeuverEvent, TrajectoryResult } from "../../mission/types";
+import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
 import { scaleDistanceKm } from "../lib/scale";
 import {
   buildSpeedTelemetry,
@@ -91,6 +92,10 @@ export default function SolarSystemScene({
   const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, telemetryMode);
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
   const upcomingManeuver = activeManeuver ? null : findUpcomingManeuver(result.maneuverEvents, currentEpoch);
+  const timelineSnapshot = getMissionTimelineSnapshot(result.missionTimeline, currentEpoch);
+  const currentPhase = timelineSnapshot.currentPhase;
+  const nextEvent = timelineSnapshot.nextEvent;
+  const phaseSegments = result.missionTimeline?.phases ?? [];
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -230,6 +235,29 @@ export default function SolarSystemScene({
             ) : null}
           </div>
         ) : null}
+
+        {result.missionTimeline ? (
+          <div className="scene-phase-panel" aria-label={copy.phaseTimeline}>
+            <div className="scene-phase-panel__section">
+              <span className="scene-phase-panel__label">{copy.currentPhase}</span>
+              <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
+              <p>{currentPhase?.description ?? copy.currentEpochPending}</p>
+            </div>
+            <div className="scene-phase-panel__section">
+              <span className="scene-phase-panel__label">{copy.missionObjective}</span>
+              <strong>{result.missionTimeline.currentObjective ?? planetLabel(language, result.closestApproach.bodyId)}</strong>
+            </div>
+            <div className="scene-phase-panel__section">
+              <span className="scene-phase-panel__label">{copy.nextEvent}</span>
+              <strong>{nextEvent?.title ?? copy.noUpcomingEvent}</strong>
+              <p>
+                {nextEvent && currentEpoch
+                  ? `${formatTimeUntil(currentEpoch, nextEvent.epoch, language)} · ${nextEvent.description}`
+                  : copy.noUpcomingEvent}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="scene-body-list scene-body-list--inline" aria-label={copy.visibleBodies}>
@@ -257,6 +285,38 @@ export default function SolarSystemScene({
       </div>
 
       <div className="scene-shell__footer">
+        {result.missionTimeline ? (
+          <div className="scene-phase-timeline" aria-label={copy.phaseTimeline} data-testid="mission-phase-timeline">
+            <div className="scene-phase-timeline__header">
+              <span>{copy.phaseTimeline}</span>
+              <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
+            </div>
+            <div className="scene-phase-timeline__track">
+              {phaseSegments.map((phase, index) => (
+                <div
+                  key={phase.id}
+                  data-testid={`mission-phase-segment-${index}`}
+                  className="scene-phase-timeline__segment"
+                  data-active={phase.id === currentPhase?.id ? "true" : "false"}
+                  style={{
+                    width: `${phaseWidthPercent(
+                      phase.startEpoch,
+                      phase.endEpoch,
+                      result.missionTimeline?.missionStartEpoch ?? null,
+                      result.missionTimeline?.missionEndEpoch ?? null,
+                    )}%`,
+                  }}
+                  title={phase.title}
+                />
+              ))}
+              <span
+                className="scene-phase-timeline__cursor"
+                style={{ left: `${timelineSnapshot.progress * 100}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div className="scene-shell__footer-controls">
           <div className="scene-playback-actions">
             <button type="button" className="scene-action-button" onClick={isPlaying ? onPause : onPlay}>
@@ -817,6 +877,36 @@ function formatDurationSeconds(seconds: number) {
 
 function formatMassKg(value: number) {
   return `${value.toFixed(1)} kg`;
+}
+
+function formatTimeUntil(currentEpoch: string, eventEpoch: string, language: Language) {
+  const deltaSeconds = Math.max((new Date(eventEpoch).getTime() - new Date(currentEpoch).getTime()) / 1000, 0);
+  const days = deltaSeconds / 86_400;
+  if (days >= 1) {
+    return language === "zh" ? `${days.toFixed(1)} 天后` : `in ${days.toFixed(1)} days`;
+  }
+
+  const hours = deltaSeconds / 3_600;
+  return language === "zh" ? `${hours.toFixed(1)} 小时后` : `in ${hours.toFixed(1)} hours`;
+}
+
+function phaseWidthPercent(
+  startEpoch: string,
+  endEpoch: string,
+  missionStartEpoch: string | null,
+  missionEndEpoch: string | null,
+) {
+  if (!missionStartEpoch || !missionEndEpoch) {
+    return 0;
+  }
+
+  const missionStart = new Date(missionStartEpoch).getTime();
+  const missionEnd = new Date(missionEndEpoch).getTime();
+  const phaseStart = new Date(startEpoch).getTime();
+  const phaseEnd = new Date(endEpoch).getTime();
+  const total = Math.max(missionEnd - missionStart, 1);
+  const width = Math.max(phaseEnd - phaseStart, 0);
+  return (width / total) * 100;
 }
 
 function findActiveManeuver(maneuverEvents: ManeuverEvent[] | undefined, currentEpoch: string | null) {

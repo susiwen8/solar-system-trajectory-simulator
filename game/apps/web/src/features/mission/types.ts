@@ -86,6 +86,34 @@ export type ManeuverEvent = {
   massAfterKg: number;
 };
 
+export type MissionTimelineEvent = {
+  id: string;
+  type: string;
+  epoch: string;
+  title: string;
+  description: string;
+  relatedBody?: string | null;
+};
+
+export type MissionPhase = {
+  id: string;
+  type: string;
+  startEpoch: string;
+  endEpoch: string;
+  title: string;
+  description: string;
+  relatedBody?: string | null;
+  eventIds: string[];
+};
+
+export type MissionTimeline = {
+  events: MissionTimelineEvent[];
+  phases: MissionPhase[];
+  currentObjective?: string | null;
+  missionStartEpoch: string;
+  missionEndEpoch: string;
+};
+
 export type MissionLeg = {
   startBody: string;
   endBody: string;
@@ -112,6 +140,7 @@ export type MissionCandidate = {
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;
   propulsionConfig?: PropulsionConfig | null;
+  missionTimeline?: MissionTimeline | null;
 };
 
 export type TrajectoryResult = {
@@ -134,6 +163,7 @@ export type TrajectoryResult = {
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;
   propulsionConfig?: PropulsionConfig | null;
+  missionTimeline?: MissionTimeline | null;
 };
 
 export type ScenePoint = {

@@ -8,6 +8,8 @@ def test_mission_service_returns_closest_approach_metric(bundled_ephemeris, samp
     assert result.closest_approach["bodyId"] == "mars"
     assert result.flight_time_seconds > 0
     assert len(result.samples) > 1
+    assert result.mission_timeline is not None
+    assert result.mission_timeline["phases"]
 
 
 def test_mission_service_warns_for_extreme_probe_distance(bundled_ephemeris, sample_mission_request) -> None:
@@ -111,3 +113,4 @@ def test_mission_service_can_plan_a_full_auto_transfer(bundled_ephemeris) -> Non
     assert result.flight_time_seconds > 100 * 24 * 3600
     assert len(result.samples) > 100
     assert result.closest_approach["distanceKm"] < 2_000_000
+    assert any(phase["type"] == "targetApproach" for phase in result.mission_timeline["phases"])

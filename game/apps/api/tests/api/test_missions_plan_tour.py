@@ -19,7 +19,11 @@ def test_plan_tour_returns_ranked_candidates() -> None:
     assert data["referenceFrame"] == "heliocentric-inertial"
     assert data["ephemerisSource"]
     assert len(data["candidates"]) >= 1
+    assert "missionTimeline" in data
+    assert data["missionTimeline"]["phases"]
     assert data["candidates"][0]["visitOrder"]
+    assert "missionTimeline" in data["candidates"][0]
+    assert data["candidates"][0]["missionTimeline"]["events"]
     assert data["candidates"][0]["fullSequenceBodies"][0] == "earth"
     assert set(data["candidates"][0]["visitOrder"]) == {"venus", "jupiter", "saturn"}
 

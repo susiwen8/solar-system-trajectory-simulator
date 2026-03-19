@@ -11,6 +11,7 @@ from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.flyby import evaluate_unpowered_flyby
 from app.core.dynamics.lambert import solve_lambert_transfer
 from app.core.dynamics.propagator import propagate_state
+from app.services.mission_timeline import build_mission_timeline
 from app.services.transfer_planner import TransferPlanner
 
 OUTER_TARGETS = {"jupiter", "saturn", "uranus", "neptune"}
@@ -59,9 +60,10 @@ class GravityAssistCandidate:
     closest_approach: Dict[str, object]
     warnings: Tuple[str, ...]
     flyby_events: Tuple[CandidateFlybyEvent, ...]
+    mission_timeline: Optional[Dict[str, object]] = None
 
     def to_dict(self) -> Dict[str, object]:
-        return {
+        payload = {
             "sequenceBodies": list(self.sequence_bodies),
             "score": self.score,
             "deltaVKmPerS": self.delta_v_km_per_s,
@@ -71,6 +73,9 @@ class GravityAssistCandidate:
             "warnings": list(self.warnings),
             "flybyEvents": [event.to_dict() for event in self.flyby_events],
         }
+        if self.mission_timeline is not None:
+            payload["missionTimeline"] = self.mission_timeline
+        return payload
 
 
 @dataclass(frozen=True)
@@ -442,6 +447,21 @@ class GravityAssistSearchService:
             closest_approach=closest_approach,
             warnings=tuple([*warnings]),
             flyby_events=candidate.flyby_events,
+            mission_timeline=build_mission_timeline(
+                launch_epoch=candidate.leg_plans[0].departure_epoch,
+                flight_time_seconds=candidate.total_flight_time_seconds,
+                target_body=target_body,
+                samples=samples,
+                closest_approach={
+                    **closest_approach,
+                    "epoch": _epoch_with_offset(
+                        candidate.leg_plans[0].departure_epoch,
+                        float(closest_approach["epochSeconds"]),
+                    ),
+                },
+                flyby_events=[event.to_dict() for event in candidate.flyby_events],
+                departure_body=departure_body,
+            ),
         )
 
     def _make_acceleration_fn(self, base_epoch: str):

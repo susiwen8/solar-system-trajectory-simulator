@@ -24,6 +24,8 @@ def test_tour_planner_covers_all_required_visits() -> None:
     assert candidates
     assert set(candidates[0].visit_order) == {"venus", "jupiter", "saturn"}
     assert candidates[0].full_sequence_bodies[0] == "earth"
+    assert candidates[0].mission_timeline is not None
+    assert candidates[0].mission_timeline["events"]
 
 
 def test_tour_planner_can_choose_non_input_visit_order() -> None:
@@ -71,3 +73,4 @@ def test_tour_planner_carries_maneuver_events_into_candidates() -> None:
 
     assert candidates
     assert candidates[0].maneuver_events is not None
+    assert candidates[0].mission_timeline is not None

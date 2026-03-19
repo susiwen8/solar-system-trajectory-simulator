@@ -50,6 +50,9 @@ def test_propagate_supports_auto_transfer_requests() -> None:
     assert data["flightTimeSeconds"] > 100 * 24 * 3600
     assert len(data["samples"]) > 100
     assert "ephemerisSource" in data
+    assert "missionTimeline" in data
+    assert "events" in data["missionTimeline"]
+    assert "phases" in data["missionTimeline"]
     assert "maneuverEvents" not in data
     assert "finalMassKg" not in data
     assert "totalPropellantUsedKg" not in data
@@ -78,6 +81,9 @@ def test_propagate_returns_ranked_gravity_assist_candidates_for_outer_planets() 
     assert "deltaVKmPerS" in data
     assert "flybyEvents" in data
     assert data["flybyEvents"]
+    assert "missionTimeline" in data
+    assert data["missionTimeline"]["phases"]
+    assert "missionTimeline" in data["candidates"][0]
     assert "jupiter" in data["sequenceBodies"]
     assert data["closestApproach"]["distanceKm"] < 5_000.0
 
@@ -106,6 +112,7 @@ def test_propagate_returns_propulsion_fields_when_maneuvers_enabled() -> None:
 
     assert response.status_code == 200
     data = response.json()
+    assert "missionTimeline" in data
     assert "maneuverEvents" in data
     assert "finalMassKg" in data
     assert "totalPropellantUsedKg" in data

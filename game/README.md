@@ -31,6 +31,39 @@ make api-test
 make web-test
 ```
 
+## Mission Phase Timeline
+
+Mission responses now include a `missionTimeline` object for both:
+
+- `POST /missions/propagate`
+- `POST /missions/plan-tour`
+
+The timeline is inferred from the existing mission solution and currently covers these major phases:
+
+- launch
+- Earth escape
+- deep-space cruise
+- maneuver execution
+- gravity-assist flyby
+- target approach
+- arrival pass
+- science operations
+- downlink
+
+Each timeline includes:
+
+- `events`
+- `phases`
+- `currentObjective`
+- `missionStartEpoch`
+- `missionEndEpoch`
+
+The browser UI uses the same object to render:
+
+- the current mission phase HUD
+- the next event card
+- the segmented mission phase timeline aligned with playback
+
 ## Finite-Thrust Corrections
 
 The simulator now supports short automatic finite-thrust correction burns on both single-target missions and multi-planet tours.

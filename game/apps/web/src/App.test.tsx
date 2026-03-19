@@ -51,6 +51,47 @@ it("shows the mission metrics panel after propagation results load", async () =>
             distanceKm: 8450000,
             epochSeconds: 21600
           },
+          missionTimeline: {
+            missionStartEpoch: "2026-01-01T00:00:00.000Z",
+            missionEndEpoch: "2026-01-04T00:00:00.000Z",
+            currentObjective: "Arrive at Mars",
+            events: [
+              {
+                id: "event-001",
+                type: "launch",
+                epoch: "2026-01-01T00:00:00.000Z",
+                title: "Launch",
+                description: "Depart Earth."
+              },
+              {
+                id: "event-002",
+                type: "targetApproach",
+                epoch: "2026-01-02T12:00:00.000Z",
+                title: "Mars Approach",
+                description: "Begin final approach."
+              }
+            ],
+            phases: [
+              {
+                id: "phase-001",
+                type: "launch",
+                startEpoch: "2026-01-01T00:00:00.000Z",
+                endEpoch: "2026-01-01T06:00:00.000Z",
+                title: "Launch",
+                description: "Initial departure.",
+                eventIds: ["event-001"]
+              },
+              {
+                id: "phase-002",
+                type: "deepSpaceCruise",
+                startEpoch: "2026-01-01T06:00:00.000Z",
+                endEpoch: "2026-01-04T00:00:00.000Z",
+                title: "Deep-Space Cruise",
+                description: "Cruise between mission events.",
+                eventIds: []
+              }
+            ]
+          },
           ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
           flightTimeSeconds: 259200,
           warnings: []
@@ -153,6 +194,10 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByLabelText("Three.js 飞行画布")).toBeInTheDocument();
   expect(await screen.findByLabelText("缩放")).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "开始" })).toBeInTheDocument();
+  expect(await screen.findByText("当前阶段")).toBeInTheDocument();
+  expect(await screen.findByText("下一事件")).toBeInTheDocument();
+  expect(await screen.findByTestId("mission-phase-timeline")).toBeInTheDocument();
+  expect(screen.getAllByTestId(/mission-phase-segment-/).length).toBeGreaterThan(1);
   expect(
     (await screen.findAllByText("jpl-horizons-file+fallback:bundled-keplerian")).length,
   ).toBeGreaterThan(0);

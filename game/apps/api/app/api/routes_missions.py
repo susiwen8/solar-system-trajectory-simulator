@@ -70,5 +70,6 @@ def plan_tour(request: MissionTourRequest) -> dict:
         "finalMassKg": best_candidate.final_mass_kg if best_candidate else None,
         "totalPropellantUsedKg": best_candidate.total_propellant_used_kg if best_candidate else None,
         "propulsionConfig": best_candidate.propulsion_config if best_candidate else None,
+        "missionTimeline": best_candidate.mission_timeline if best_candidate else None,
         "candidates": [candidate.to_dict() for candidate in candidates],
     }
