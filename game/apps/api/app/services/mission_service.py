@@ -9,9 +9,12 @@ from app.core.dynamics.acceleration import combined_point_mass_acceleration
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
+from app.services.earth_escape_planner import EarthEscapePlanner
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
+from app.services.mission_segments import build_segment_boundary_state, segment_to_dict
 from app.services.mission_timeline import build_mission_timeline
+from app.services.parking_orbit_planner import ParkingOrbitPlanner
 from app.services.transfer_planner import TransferPlanner
 
 
@@ -33,6 +36,7 @@ class MissionPropagationResult:
     total_propellant_used_kg: Optional[float] = None
     propulsion_config: Optional[Dict[str, float]] = None
     mission_timeline: Optional[Dict[str, object]] = None
+    segments: Optional[List[Dict[str, object]]] = None
 
     def to_dict(self) -> Dict[str, object]:
         payload = {
@@ -63,6 +67,8 @@ class MissionPropagationResult:
             payload["propulsionConfig"] = self.propulsion_config
         if self.mission_timeline is not None:
             payload["missionTimeline"] = self.mission_timeline
+        if self.segments is not None:
+            payload["segments"] = self.segments
         return payload
 
 
@@ -71,9 +77,12 @@ class MissionService:
         self.ephemeris = ephemeris
         self.transfer_planner = TransferPlanner(ephemeris)
         self.maneuver_planner = ManeuverPlanner()
+        self.parking_orbit_planner = ParkingOrbitPlanner()
+        self.earth_escape_planner = EarthEscapePlanner(ephemeris)
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
         planner_warnings: List[str] = []
+        segment_payloads: Optional[List[Dict[str, object]]] = None
         if (
             request.initialState.launchFromBody is not None
             and request.targetBody in OUTER_TARGETS
@@ -122,17 +131,35 @@ class MissionService:
             duration_seconds = float(request.durationSeconds or 3.0 * 24.0 * 3600.0)
             output_step_seconds = float(request.outputStepSeconds or 6.0 * 3600.0)
         else:
+            parking_orbit_plan = self.parking_orbit_planner.plan_default_parking_orbit(
+                launch_epoch=request.launchEpoch,
+            )
+            earth_escape_plan = self.earth_escape_planner.plan_escape(
+                launch_epoch=request.launchEpoch,
+                parking_final_state=parking_orbit_plan.final_state,
+                target_body=request.targetBody,
+            )
             plan = self.transfer_planner.plan_auto_transfer(
                 departure_body=request.departureBody,
                 target_body=request.targetBody,
                 launch_epoch=request.launchEpoch,
             )
-            initial_state = plan.initial_state
+            initial_state = np.array(
+                [
+                    *earth_escape_plan.final_state["positionKm"],
+                    *earth_escape_plan.final_state["velocityKmPerSec"],
+                ],
+                dtype=float,
+            )
             duration_seconds = float(request.durationSeconds or plan.duration_seconds)
             output_step_seconds = float(request.outputStepSeconds or plan.output_step_seconds)
             planner_warnings = [
                 f"Auto-transfer delta-v estimate: {plan.delta_v_km_per_s:.2f} km/s",
                 f"Planned arrival miss distance estimate: {plan.miss_distance_km:.0f} km",
+            ]
+            segment_payloads = [
+                segment_to_dict(parking_orbit_plan),
+                segment_to_dict(earth_escape_plan),
             ]
 
         body_state_cache: Dict[str, list] = {}
@@ -230,6 +257,12 @@ class MissionService:
                 maneuver_events=maneuver_events,
                 departure_body=request.departureBody,
             ),
+            segments=self._build_segments(
+                request=request,
+                segment_payloads=segment_payloads,
+                samples=samples,
+                duration_seconds=duration_seconds,
+            ),
         )
 
     def _serialize_samples(self, propagation: PropagationResult) -> List[Dict[str, object]]:
@@ -275,6 +308,49 @@ class MissionService:
             }
             for sample in samples
         ]
+
+    def _build_segments(
+        self,
+        *,
+        request: MissionRequest,
+        segment_payloads: Optional[List[Dict[str, object]]],
+        samples: List[Dict[str, object]],
+        duration_seconds: float,
+    ) -> Optional[List[Dict[str, object]]]:
+        if segment_payloads is None:
+            return None
+
+        cruise_start_epoch = request.launchEpoch
+        cruise_end_epoch = _epoch_with_offset(request.launchEpoch, duration_seconds)
+        segment_payloads.append(
+            {
+                "segmentType": "heliocentricCruise",
+                "startEpoch": cruise_start_epoch,
+                "endEpoch": cruise_end_epoch,
+                "referenceFrame": "heliocentric-inertial",
+                "samples": samples,
+                "events": [],
+                "warnings": [],
+                "initialState": build_segment_boundary_state(
+                    epoch=cruise_start_epoch,
+                    reference_frame="heliocentric-inertial",
+                    position_km=samples[0]["positionKm"],
+                    velocity_km_per_s=samples[0]["velocityKmPerSec"],
+                    reference_body_id="sun",
+                ),
+                "finalState": build_segment_boundary_state(
+                    epoch=cruise_end_epoch,
+                    reference_frame="heliocentric-inertial",
+                    position_km=samples[-1]["positionKm"],
+                    velocity_km_per_s=samples[-1]["velocityKmPerSec"],
+                    reference_body_id="sun",
+                ),
+                "metadata": {
+                    "targetBody": request.targetBody,
+                },
+            }
+        )
+        return segment_payloads
 
 def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
     start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)

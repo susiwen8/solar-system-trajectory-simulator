@@ -114,3 +114,22 @@ def test_mission_service_can_plan_a_full_auto_transfer(bundled_ephemeris) -> Non
     assert len(result.samples) > 100
     assert result.closest_approach["distanceKm"] < 2_000_000
     assert any(phase["type"] == "targetApproach" for phase in result.mission_timeline["phases"])
+
+
+def test_mission_service_builds_staged_departure_segments(bundled_ephemeris) -> None:
+    from app.schemas.mission import InitialStateInput, MissionRequest
+
+    request = MissionRequest(
+        departureBody="earth",
+        targetBody="mars",
+        launchEpoch="2026-01-01T00:00:00Z",
+        initialState=InitialStateInput(launchFromBody={"mode": "autoTransfer"}),
+    )
+
+    result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
+
+    assert result.segments is not None
+    assert [segment["segmentType"] for segment in result.segments][:2] == [
+        "launchParkingOrbit",
+        "earthEscape",
+    ]
