@@ -51,6 +51,74 @@ it("shows the mission metrics panel after propagation results load", async () =>
             distanceKm: 8450000,
             epochSeconds: 21600
           },
+          segments: [
+            {
+              segmentType: "launchParkingOrbit",
+              startEpoch: "2026-01-01T00:00:00.000Z",
+              endEpoch: "2026-01-01T01:30:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T00:00:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 7.7, 0]
+              },
+              finalState: {
+                epoch: "2026-01-01T01:30:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 7.7, 0]
+              },
+              events: [],
+              orbitSummary: {
+                isBound: true,
+                periapsisKm: 6678.1,
+                apoapsisKm: 6678.1,
+                inclinationDeg: 28.5
+              }
+            },
+            {
+              segmentType: "earthEscape",
+              startEpoch: "2026-01-01T01:30:00.000Z",
+              endEpoch: "2026-01-01T07:30:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T01:30:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 10.9, 0]
+              },
+              finalState: {
+                epoch: "2026-01-01T07:30:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149597870.7, 0, 0],
+                velocityKmPerSec: [0, 32.7, 0]
+              },
+              events: []
+            },
+            {
+              segmentType: "heliocentricCruise",
+              startEpoch: "2026-01-01T07:30:00.000Z",
+              endEpoch: "2026-01-04T00:00:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T07:30:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149597870.7, 0, 0],
+                velocityKmPerSec: [0, 32.7, 0]
+              },
+              finalState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149500000, 643248, 0],
+                velocityKmPerSec: [-0.1, 29.77, 0]
+              },
+              events: []
+            }
+          ],
           missionTimeline: {
             missionStartEpoch: "2026-01-01T00:00:00.000Z",
             missionEndEpoch: "2026-01-04T00:00:00.000Z",
@@ -198,6 +266,9 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByText("下一事件")).toBeInTheDocument();
   expect(await screen.findByTestId("mission-phase-timeline")).toBeInTheDocument();
   expect(screen.getAllByTestId(/mission-phase-segment-/).length).toBeGreaterThan(1);
+  expect((await screen.findAllByText("任务分段")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("停泊轨道")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("地球逃逸")).length).toBeGreaterThan(0);
   expect(
     (await screen.findAllByText("jpl-horizons-file+fallback:bundled-keplerian")).length,
   ).toBeGreaterThan(0);

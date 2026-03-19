@@ -33,6 +33,55 @@ const result = {
   ],
   finalMassKg: 1798.8,
   totalPropellantUsedKg: 1.2,
+  segments: [
+    {
+      segmentType: "launchParkingOrbit",
+      startEpoch: "2026-01-01T00:00:00.000Z",
+      endEpoch: "2026-01-01T01:30:00.000Z",
+      samples: [],
+      initialState: {
+        epoch: "2026-01-01T00:00:00.000Z",
+        referenceFrame: "earth-centered-inertial",
+        referenceBodyId: "earth",
+        positionKm: [6678.1, 0, 0] as [number, number, number],
+        velocityKmPerSec: [0, 7.7, 0] as [number, number, number],
+      },
+      finalState: {
+        epoch: "2026-01-01T01:30:00.000Z",
+        referenceFrame: "earth-centered-inertial",
+        referenceBodyId: "earth",
+        positionKm: [6678.1, 0, 0] as [number, number, number],
+        velocityKmPerSec: [0, 7.7, 0] as [number, number, number],
+      },
+      events: [],
+      orbitSummary: {
+        isBound: true,
+        periapsisKm: 6678.1,
+        apoapsisKm: 6678.1,
+        inclinationDeg: 28.5,
+      },
+    },
+    {
+      segmentType: "earthEscape",
+      startEpoch: "2026-01-01T01:30:00.000Z",
+      endEpoch: "2026-01-01T07:30:00.000Z",
+      samples: [],
+      initialState: {
+        epoch: "2026-01-01T01:30:00.000Z",
+        referenceFrame: "earth-centered-inertial",
+        referenceBodyId: "earth",
+        positionKm: [6678.1, 0, 0] as [number, number, number],
+        velocityKmPerSec: [0, 10.9, 0] as [number, number, number],
+      },
+      finalState: {
+        epoch: "2026-01-01T07:30:00.000Z",
+        referenceFrame: "heliocentric-inertial",
+        positionKm: [149597870.7, 0, 0] as [number, number, number],
+        velocityKmPerSec: [0, 32.7, 0] as [number, number, number],
+      },
+      events: [],
+    },
+  ],
 };
 
 describe("MissionSummary", () => {
@@ -54,5 +103,13 @@ describe("MissionSummary", () => {
     expect(screen.getByText("推进剂消耗")).toBeInTheDocument();
     expect(screen.getByText("最终质量")).toBeInTheDocument();
     expect(screen.getByText("机动次数")).toBeInTheDocument();
+  });
+
+  it("renders localized mission segment labels", () => {
+    render(<MissionSummary result={result} language="en" />);
+
+    expect(screen.getByText("Mission Segments")).toBeInTheDocument();
+    expect(screen.getByText("Parking Orbit")).toBeInTheDocument();
+    expect(screen.getByText("Earth Escape")).toBeInTheDocument();
   });
 });

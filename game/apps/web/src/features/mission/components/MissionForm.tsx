@@ -26,6 +26,11 @@ const defaultTrajectoryRequest: MissionRequest = {
   departureBody: "earth",
   targetBody: "mars",
   launchEpoch: "2026-01-01T00:00:00Z",
+  launchProfile: {
+    mode: "parkingOrbit",
+    parkingOrbitAltitudeKm: 300,
+    parkingOrbitInclinationDeg: 28.5,
+  },
   initialState: {
     launchFromBody: {
       mode: "autoTransfer"

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
-import { planetLabel, t, type Language } from "../../../lib/i18n";
-import type { BodyState, ManeuverEvent, TrajectoryResult } from "../../mission/types";
+import { localizeMissionSegment, planetLabel, t, type Language } from "../../../lib/i18n";
+import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
 import { scaleDistanceKm } from "../lib/scale";
 import {
@@ -96,6 +96,7 @@ export default function SolarSystemScene({
   const currentPhase = timelineSnapshot.currentPhase;
   const nextEvent = timelineSnapshot.nextEvent;
   const phaseSegments = result.missionTimeline?.phases ?? [];
+  const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -313,6 +314,30 @@ export default function SolarSystemScene({
                 className="scene-phase-timeline__cursor"
                 style={{ left: `${timelineSnapshot.progress * 100}%` }}
               />
+            </div>
+          </div>
+        ) : null}
+
+        {result.segments?.length ? (
+          <div className="scene-phase-timeline" aria-label={copy.missionSegments}>
+            <div className="scene-phase-timeline__header">
+              <span>{copy.missionSegments}</span>
+              <strong>
+                {activeSegment ? localizeMissionSegment(language, activeSegment.segmentType) : copy.awaitingPropagation}
+              </strong>
+            </div>
+            <div className="scene-body-list scene-body-list--inline">
+              {result.segments.map((segment, index) => (
+                <div
+                  key={`${segment.segmentType}-${segment.startEpoch}`}
+                  className="scene-body-chip"
+                  data-active={segment.segmentType === activeSegment?.segmentType ? "true" : "false"}
+                  data-testid={`mission-segment-chip-${index}`}
+                >
+                  <span className="scene-body-chip__dot" aria-hidden="true" />
+                  <span>{localizeMissionSegment(language, segment.segmentType)}</span>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
@@ -934,6 +959,25 @@ function findUpcomingManeuver(maneuverEvents: ManeuverEvent[] | undefined, curre
     maneuverEvents
       .filter((event) => new Date(event.startEpoch).getTime() > currentTimeMs)
       .sort((left, right) => new Date(left.startEpoch).getTime() - new Date(right.startEpoch).getTime())[0] ?? null
+  );
+}
+
+function findActiveSegment(segments: MissionSegment[], currentEpoch: string | null) {
+  if (!segments.length) {
+    return null;
+  }
+
+  if (!currentEpoch) {
+    return segments[0] ?? null;
+  }
+
+  const currentTimeMs = new Date(currentEpoch).getTime();
+  return (
+    segments.find((segment) => {
+      const startMs = new Date(segment.startEpoch).getTime();
+      const endMs = new Date(segment.endEpoch).getTime();
+      return currentTimeMs >= startMs && currentTimeMs <= endMs;
+    }) ?? segments[0]
   );
 }
 

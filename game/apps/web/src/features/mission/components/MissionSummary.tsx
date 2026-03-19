@@ -1,5 +1,5 @@
 import type { TrajectoryResult } from "../types";
-import { localizeWarning, planetLabel, t, type Language } from "../../../lib/i18n";
+import { localizeMissionSegment, localizeWarning, planetLabel, t, type Language } from "../../../lib/i18n";
 
 type MissionSummaryProps = {
   result: TrajectoryResult;
@@ -19,8 +19,17 @@ function formatFlightTimeDays(seconds: number): string {
   }).format(seconds / 86400);
 }
 
+function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
+  const durationHours = Math.max((Date.parse(endEpoch) - Date.parse(startEpoch)) / 3_600_000, 0);
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: durationHours >= 10 ? 0 : 1,
+    minimumFractionDigits: 0,
+  }).format(durationHours);
+}
+
 export default function MissionSummary({ result, language }: MissionSummaryProps) {
   const copy = t(language);
+  const segments = result.segments ?? [];
   return (
     <section className="summary-card" aria-label={copy.missionSummary}>
       <p className="summary-card__eyebrow">{copy.telemetrySnapshot}</p>
@@ -72,6 +81,20 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
       ) : (
         <p className="summary-ok">{copy.noWarnings}</p>
       )}
+
+      {segments.length > 0 ? (
+        <div className="summary-segments" aria-label={copy.missionSegments}>
+          <p className="summary-card__eyebrow">{copy.missionSegments}</p>
+          <ul className="summary-warning-list">
+            {segments.map((segment) => (
+              <li key={`${segment.segmentType}-${segment.startEpoch}`}>
+                <strong>{localizeMissionSegment(language, segment.segmentType)}</strong>
+                {` · ${formatSegmentDuration(segment.startEpoch, segment.endEpoch)} h`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }
