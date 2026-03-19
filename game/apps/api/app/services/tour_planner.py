@@ -3,7 +3,9 @@ from datetime import datetime, timedelta, timezone
 from itertools import permutations
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from app.schemas.mission import PropulsionConfig
 from app.services.gravity_assist_search import GravityAssistCandidate, GravityAssistSearchService
+from app.services.maneuver_planner import ManeuverPlanner
 
 @dataclass(frozen=True)
 class TourLeg:
@@ -52,9 +54,13 @@ class MissionTourCandidate:
     samples: List[dict]
     warnings: Tuple[str, ...]
     closest_approach: Dict[str, object]
+    maneuver_events: Optional[Tuple[dict, ...]] = None
+    final_mass_kg: Optional[float] = None
+    total_propellant_used_kg: Optional[float] = None
+    propulsion_config: Optional[Dict[str, float]] = None
 
     def to_dict(self) -> Dict[str, object]:
-        return {
+        payload = {
             "visitOrder": list(self.visit_order),
             "fullSequenceBodies": list(self.full_sequence_bodies),
             "legs": [leg.to_dict() for leg in self.legs],
@@ -67,12 +73,22 @@ class MissionTourCandidate:
             "warnings": list(self.warnings),
             "closestApproach": self.closest_approach,
         }
+        if self.maneuver_events is not None:
+            payload["maneuverEvents"] = list(self.maneuver_events)
+        if self.final_mass_kg is not None:
+            payload["finalMassKg"] = self.final_mass_kg
+        if self.total_propellant_used_kg is not None:
+            payload["totalPropellantUsedKg"] = self.total_propellant_used_kg
+        if self.propulsion_config is not None:
+            payload["propulsionConfig"] = self.propulsion_config
+        return payload
 
 
 class MissionTourPlanner:
     def __init__(self, ephemeris) -> None:
         self.ephemeris = ephemeris
         self.gravity_assist_search = GravityAssistSearchService(ephemeris)
+        self.maneuver_planner = ManeuverPlanner()
 
     def plan_tour(
         self,
@@ -84,6 +100,7 @@ class MissionTourPlanner:
         max_returned_candidates: int = 5,
         allow_assist_bodies: bool = True,
         allow_repeated_flybys: bool = True,
+        propulsion_config: Optional[PropulsionConfig] = None,
     ) -> List[MissionTourCandidate]:
         visit_orders = self._generate_visit_orders(required_visit_bodies)
         candidates: List[MissionTourCandidate] = []
@@ -95,6 +112,7 @@ class MissionTourPlanner:
                 launch_epoch=launch_epoch,
                 max_assist_bodies_per_leg=max_assist_bodies_per_leg if allow_assist_bodies else 0,
                 allow_repeated_flybys=allow_repeated_flybys,
+                propulsion_config=propulsion_config,
             )
             if candidate is not None:
                 candidates.append(candidate)
@@ -132,6 +150,7 @@ class MissionTourPlanner:
         launch_epoch: str,
         max_assist_bodies_per_leg: int,
         allow_repeated_flybys: bool,
+        propulsion_config: Optional[PropulsionConfig],
     ) -> Optional[MissionTourCandidate]:
         current_body = departure_body
         current_epoch = launch_epoch
@@ -156,6 +175,7 @@ class MissionTourPlanner:
             visit_order=visit_order,
             launch_epoch=launch_epoch,
             leg_candidates=leg_candidates,
+            propulsion_config=propulsion_config,
         )
 
     def _select_leg_candidate(
@@ -199,6 +219,7 @@ class MissionTourPlanner:
         visit_order: Tuple[str, ...],
         launch_epoch: str,
         leg_candidates: Sequence[GravityAssistCandidate],
+        propulsion_config: Optional[PropulsionConfig],
     ) -> MissionTourCandidate:
         full_sequence_bodies: List[str] = [departure_body]
         legs: List[TourLeg] = []
@@ -258,6 +279,36 @@ class MissionTourPlanner:
         total_days = epoch_offset / 86_400.0
         score = total_delta_v + total_days * 0.015 + len(flyby_events) * 0.5 + repeated_penalty
 
+        maneuver_events = None
+        final_mass_kg = None
+        total_propellant_used_kg = None
+        propulsion_payload = None
+        if propulsion_config is not None:
+            correction_direction = None
+            if len(samples) >= 2:
+                correction_direction = tuple(
+                    float(samples[-1]["positionKm"][index] - samples[-2]["positionKm"][index]) for index in range(3)
+                )
+            burn_segments = self.maneuver_planner.plan_candidate_windows(
+                samples=samples,
+                closest_epoch_seconds=float(epoch_offset),
+                propulsion_config=propulsion_config,
+                correction_direction=correction_direction,
+            )
+            maneuver_event_list = self.maneuver_planner.build_maneuver_events(
+                launch_epoch=launch_epoch,
+                propulsion_config=propulsion_config,
+                burn_segments=burn_segments,
+            )
+            maneuver_events = tuple(maneuver_event_list)
+            if maneuver_event_list:
+                final_mass_kg = float(maneuver_event_list[-1]["massAfterKg"])
+                total_propellant_used_kg = round(
+                    propulsion_config.initialMassKg - final_mass_kg,
+                    6,
+                )
+            propulsion_payload = propulsion_config.model_dump()
+
         return MissionTourCandidate(
             visit_order=visit_order,
             full_sequence_bodies=tuple(full_sequence_bodies),
@@ -274,6 +325,10 @@ class MissionTourPlanner:
                 "distanceKm": float(legs[-1].closest_approach_km),
                 "epochSeconds": float(epoch_offset),
             },
+            maneuver_events=maneuver_events,
+            final_mass_kg=final_mass_kg,
+            total_propellant_used_kg=total_propellant_used_kg,
+            propulsion_config=propulsion_payload,
         )
 
 

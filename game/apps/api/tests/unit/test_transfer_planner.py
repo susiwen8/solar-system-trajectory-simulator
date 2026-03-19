@@ -28,3 +28,13 @@ def test_transfer_planner_starts_auto_transfer_near_earth_sphere_of_influence(bu
     )
 
     assert 500_000.0 < departure_offset_km < 1_500_000.0
+
+
+def test_auto_transfer_without_propulsion_keeps_six_element_state_vector(bundled_ephemeris) -> None:
+    plan = TransferPlanner(ephemeris=bundled_ephemeris).plan_auto_transfer(
+        departure_body="earth",
+        target_body="mars",
+        launch_epoch="2026-01-01T00:00:00Z",
+    )
+
+    assert plan.initial_state.shape == (6,)

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.core.ephemeris.factory import create_ephemeris
+from app.schemas.mission import PropulsionConfig
 from app.services.tour_planner import MissionTourPlanner
 
 
@@ -51,3 +52,22 @@ def test_tour_planner_respects_assist_limit_per_leg() -> None:
     assert candidates
     for leg in candidates[0].legs:
         assert len(leg.assist_bodies) <= 1
+
+
+def test_tour_planner_carries_maneuver_events_into_candidates() -> None:
+    planner = build_planner()
+
+    candidates = planner.plan_tour(
+        departure_body="earth",
+        required_visit_bodies=("venus", "jupiter", "saturn"),
+        launch_epoch="2026-01-01T00:00:00Z",
+        propulsion_config=PropulsionConfig(
+            initialMassKg=1800.0,
+            propellantMassKg=420.0,
+            maxThrustN=0.8,
+            ispSeconds=3200.0,
+        ),
+    )
+
+    assert candidates
+    assert candidates[0].maneuver_events is not None

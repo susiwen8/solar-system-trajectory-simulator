@@ -50,6 +50,9 @@ def test_propagate_supports_auto_transfer_requests() -> None:
     assert data["flightTimeSeconds"] > 100 * 24 * 3600
     assert len(data["samples"]) > 100
     assert "ephemerisSource" in data
+    assert "maneuverEvents" not in data
+    assert "finalMassKg" not in data
+    assert "totalPropellantUsedKg" not in data
 
 
 def test_propagate_returns_ranked_gravity_assist_candidates_for_outer_planets() -> None:

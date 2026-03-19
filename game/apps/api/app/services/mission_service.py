@@ -10,6 +10,7 @@ from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
+from app.services.maneuver_planner import ManeuverPlanner
 from app.services.transfer_planner import TransferPlanner
 
 
@@ -26,6 +27,10 @@ class MissionPropagationResult:
     score: Optional[float] = None
     delta_v_km_per_s: Optional[float] = None
     flyby_events: Optional[List[Dict[str, object]]] = None
+    maneuver_events: Optional[List[Dict[str, object]]] = None
+    final_mass_kg: Optional[float] = None
+    total_propellant_used_kg: Optional[float] = None
+    propulsion_config: Optional[Dict[str, float]] = None
 
     def to_dict(self) -> Dict[str, object]:
         payload = {
@@ -46,6 +51,14 @@ class MissionPropagationResult:
             payload["deltaVKmPerS"] = self.delta_v_km_per_s
         if self.flyby_events is not None:
             payload["flybyEvents"] = self.flyby_events
+        if self.maneuver_events is not None:
+            payload["maneuverEvents"] = self.maneuver_events
+        if self.final_mass_kg is not None:
+            payload["finalMassKg"] = self.final_mass_kg
+        if self.total_propellant_used_kg is not None:
+            payload["totalPropellantUsedKg"] = self.total_propellant_used_kg
+        if self.propulsion_config is not None:
+            payload["propulsionConfig"] = self.propulsion_config
         return payload
 
 
@@ -53,10 +66,15 @@ class MissionService:
     def __init__(self, ephemeris) -> None:
         self.ephemeris = ephemeris
         self.transfer_planner = TransferPlanner(ephemeris)
+        self.maneuver_planner = ManeuverPlanner()
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
         planner_warnings: List[str] = []
-        if request.initialState.launchFromBody is not None and request.targetBody in OUTER_TARGETS:
+        if (
+            request.initialState.launchFromBody is not None
+            and request.targetBody in OUTER_TARGETS
+            and request.propulsionConfig is None
+        ):
             search_candidates = GravityAssistSearchService(self.ephemeris).search(
                 departure_body=request.departureBody,
                 target_body=request.targetBody,
@@ -127,6 +145,58 @@ class MissionService:
         closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
         warnings = planner_warnings + self._compute_warnings(samples)
 
+        maneuver_events: Optional[List[Dict[str, object]]] = None
+        final_mass_kg: Optional[float] = None
+        total_propellant_used_kg: Optional[float] = None
+        propulsion_config_payload: Optional[Dict[str, float]] = None
+
+        if request.propulsionConfig is not None:
+            correction_direction = tuple(
+                float(target_samples[-1]["positionKm"][index] - samples[-1]["positionKm"][index]) for index in range(3)
+            )
+            burn_segments = self.maneuver_planner.plan_candidate_windows(
+                samples=samples,
+                closest_epoch_seconds=float(closest_approach["epochSeconds"]),
+                propulsion_config=request.propulsionConfig,
+                correction_direction=correction_direction,
+            )
+
+            maneuver_propagation = propagate_state(
+                initial_state=np.concatenate(
+                    (
+                        initial_state,
+                        np.array([request.propulsionConfig.initialMassKg], dtype=float),
+                    )
+                ),
+                t_span=(0.0, duration_seconds),
+                sample_step_s=output_step_seconds,
+                acceleration_fn=acceleration_fn,
+                burn_segments=burn_segments,
+            )
+            samples = self._serialize_samples(maneuver_propagation)
+            target_samples = self._target_samples_for_request(request, samples)
+            closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
+            final_mass_kg = (
+                float(maneuver_propagation.samples[-1].mass_kg)
+                if maneuver_propagation.samples and maneuver_propagation.samples[-1].mass_kg is not None
+                else None
+            )
+            total_propellant_used_kg = (
+                round(request.propulsionConfig.initialMassKg - final_mass_kg, 6)
+                if final_mass_kg is not None
+                else None
+            )
+            maneuver_events = self.maneuver_planner.build_maneuver_events(
+                launch_epoch=request.launchEpoch,
+                propulsion_config=request.propulsionConfig,
+                burn_segments=burn_segments,
+            )
+            propulsion_config_payload = request.propulsionConfig.model_dump()
+            warnings = [
+                *warnings,
+                f"Finite-thrust planner scheduled {len(maneuver_events)} correction burns",
+            ]
+
         return MissionPropagationResult(
             reference_frame="heliocentric-inertial",
             ephemeris_source=getattr(self.ephemeris, "source_name", "unknown"),
@@ -134,17 +204,24 @@ class MissionService:
             closest_approach=closest_approach,
             flight_time_seconds=duration_seconds,
             warnings=warnings,
+            maneuver_events=maneuver_events,
+            final_mass_kg=final_mass_kg,
+            total_propellant_used_kg=total_propellant_used_kg,
+            propulsion_config=propulsion_config_payload,
         )
 
     def _serialize_samples(self, propagation: PropagationResult) -> List[Dict[str, object]]:
-        return [
-            {
+        samples: List[Dict[str, object]] = []
+        for sample in propagation.samples:
+            payload: Dict[str, object] = {
                 "epochSeconds": sample.epoch_seconds,
                 "positionKm": list(sample.position_km),
                 "velocityKmPerSec": list(sample.velocity_km_per_s),
             }
-            for sample in propagation.samples
-        ]
+            if sample.mass_kg is not None:
+                payload["massKg"] = sample.mass_kg
+            samples.append(payload)
+        return samples
 
     def _compute_warnings(self, samples: List[Dict[str, object]]) -> List[str]:
         if not samples:
@@ -176,7 +253,6 @@ class MissionService:
             }
             for sample in samples
         ]
-
 
 def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
     start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)

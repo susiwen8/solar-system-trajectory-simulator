@@ -3,8 +3,7 @@ from typing import Tuple
 
 import numpy as np
 
-
-STANDARD_GRAVITY_M_PER_S2 = 9.80665
+from app.core.constants import STANDARD_GRAVITY_M_PER_S2
 
 
 @dataclass(frozen=True)
