@@ -33,6 +33,32 @@ make web-test
 
 ## Mission Phase Timeline
 
+## Phase A Earth Departure
+
+Single-target auto-transfer missions now begin with a staged Earth departure instead of jumping straight into heliocentric cruise.
+
+- The default `launchProfile` uses an Earth parking-orbit departure.
+- The backend models a dedicated Earth-escape segment before the heliocentric cruise segment.
+- `POST /missions/propagate` responses now include a `segments` array alongside the merged mission samples.
+
+### Example Response Fields
+
+`segments` currently includes the Phase A departure chain:
+
+- `launchParkingOrbit`
+- `earthEscape`
+- `heliocentricCruise`
+
+Each segment includes:
+
+- `segmentType`
+- `startEpoch`
+- `endEpoch`
+- `samples`
+- `initialState`
+- `finalState`
+- `events`
+
 Mission responses now include a `missionTimeline` object for both:
 
 - `POST /missions/propagate`
@@ -41,6 +67,7 @@ Mission responses now include a `missionTimeline` object for both:
 The timeline is inferred from the existing mission solution and currently covers these major phases:
 
 - launch
+- parking orbit
 - Earth escape
 - deep-space cruise
 - maneuver execution
