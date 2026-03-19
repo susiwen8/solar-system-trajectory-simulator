@@ -31,6 +31,35 @@ make api-test
 make web-test
 ```
 
+### Importing JPL Horizons Data
+
+If you export heliocentric `VECTORS` tables from JPL Horizons as CSV, you can convert them into the simulator's ephemeris format:
+
+```bash
+cd apps/api
+uv run python -m app.core.ephemeris.horizons_import \
+  --input earth=./earth_vectors.csv \
+  --input mars=./mars_vectors.csv \
+  --output ./data/ephemeris/jpl_import.json
+```
+
+You can also pass plain file paths and let the importer infer the body ids from the Horizons headers:
+
+```bash
+uv run python -m app.core.ephemeris.horizons_import \
+  --input ./earth_vectors.csv \
+  --input ./mars_vectors.csv \
+  --output ./data/ephemeris/jpl_import.json
+```
+
+Then point the API at the imported file:
+
+```bash
+export SOLAR_SYSTEM_JPL_EPHEMERIS_PATH=./data/ephemeris/jpl_import.json
+```
+
+The backend will prefer that JPL-derived file and fall back to the bundled/keplerian ephemeris when the imported file does not cover a requested body or epoch.
+
 ### First Demo Flow
 
 1. Start the backend with `make api-dev`

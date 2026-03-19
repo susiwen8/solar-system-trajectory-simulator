@@ -6,6 +6,7 @@ def test_two_body_reference_case_returns_ordered_samples() -> None:
 
     assert len(result.samples) > 10
     assert result.samples[0].epoch_seconds < result.samples[-1].epoch_seconds
+    assert result.samples[-1].epoch_seconds == 30.0 * 24.0 * 3600.0
 
 
 def test_two_body_reference_case_keeps_specific_orbital_energy_stable() -> None:

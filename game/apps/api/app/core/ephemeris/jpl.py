@@ -4,10 +4,9 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 from app.core.ephemeris.base import BodyState, MAJOR_BODY_IDS
-from app.core.ephemeris.keplerian import PLANETARY_ELEMENTS, keplerian_body_state
 
 
-class BundledEphemeris:
+class JPLFileEphemeris:
     def __init__(self, data_path: Union[str, Path]) -> None:
         self.data_path = Path(data_path)
         self._dataset = json.loads(self.data_path.read_text())
@@ -15,33 +14,29 @@ class BundledEphemeris:
 
     @property
     def source_name(self) -> str:
-        return "bundled-keplerian"
+        return str(self._dataset.get("metadata", {}).get("source", "jpl-horizons-file"))
 
     def get_body_state(self, body_id: str, epoch: str) -> BodyState:
         if body_id not in self._dataset["bodies"]:
-            if body_id in PLANETARY_ELEMENTS or body_id == "sun":
-                return keplerian_body_state(body_id, epoch)
             raise KeyError(body_id)
 
         body_record = self._dataset["bodies"][body_id]
-        requested_time = _parse_epoch(epoch)
-        try:
-            sample = self._interpolate_sample(body_id, requested_time)
-        except KeyError:
-            if body_id in PLANETARY_ELEMENTS or body_id == "sun":
-                return keplerian_body_state(body_id, epoch)
-            raise
+        sample = self._interpolate_sample(body_id, _parse_epoch(epoch))
         return BodyState(
             body_id=body_id,
             epoch=epoch,
             position_km=tuple(sample["positionKm"]),
             velocity_km_per_s=tuple(sample["velocityKmPerSec"]),
             mu_km3_per_s2=body_record["muKm3PerS2"],
-            source_name="bundled-ephemeris",
+            source_name=self.source_name,
         )
 
     def get_all_body_states(self, epoch: str) -> list[BodyState]:
-        return [self.get_body_state(body_id, epoch) for body_id in MAJOR_BODY_IDS]
+        return [
+            self.get_body_state(body_id, epoch)
+            for body_id in MAJOR_BODY_IDS
+            if body_id in self._dataset["bodies"]
+        ]
 
     def _build_sample_times(self) -> Dict[str, List[Tuple[datetime, str]]]:
         sample_times: Dict[str, List[Tuple[datetime, str]]] = {}
@@ -61,7 +56,7 @@ class BundledEphemeris:
                 return samples[sample_epoch]
 
         if requested_time < sample_times[0][0] or requested_time > sample_times[-1][0]:
-            raise KeyError(f"Epoch {requested_time.isoformat()} is outside bundled ephemeris range for {body_id}")
+            raise KeyError(f"Epoch {requested_time.isoformat()} is outside JPL ephemeris range for {body_id}")
 
         for index in range(1, len(sample_times)):
             previous_time, previous_epoch = sample_times[index - 1]

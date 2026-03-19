@@ -9,3 +9,15 @@ SOLAR_SYSTEM_MU_KM3_PER_S2 = {
     "uranus": 5_793_939.0,
     "neptune": 6_836_529.0,
 }
+
+PLANETARY_BODY_RADII_KM = {
+    "sun": 695_700.0,
+    "mercury": 2_439.7,
+    "venus": 6_051.8,
+    "earth": 6_378.1,
+    "mars": 3_389.5,
+    "jupiter": 69_911.0,
+    "saturn": 58_232.0,
+    "uranus": 25_362.0,
+    "neptune": 24_622.0,
+}

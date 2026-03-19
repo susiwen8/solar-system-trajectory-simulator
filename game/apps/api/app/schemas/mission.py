@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,9 +8,13 @@ class StateVectorInput(BaseModel):
     velocityKmPerSec: Tuple[float, float, float]
 
 
+class LaunchFromBodyInput(BaseModel):
+    mode: Literal["autoTransfer"] = "autoTransfer"
+
+
 class InitialStateInput(BaseModel):
     stateVector: Optional[StateVectorInput] = None
-    launchFromBody: Optional[Dict[str, object]] = None
+    launchFromBody: Optional[LaunchFromBodyInput] = None
 
     @model_validator(mode="after")
     def ensure_exactly_one_mode(self) -> "InitialStateInput":
@@ -24,5 +28,5 @@ class MissionRequest(BaseModel):
     targetBody: str = Field(min_length=1)
     launchEpoch: str = Field(min_length=1)
     initialState: InitialStateInput
-    durationSeconds: float = Field(gt=0)
-    outputStepSeconds: float = Field(gt=0)
+    durationSeconds: Optional[float] = Field(default=None, gt=0)
+    outputStepSeconds: Optional[float] = Field(default=None, gt=0)

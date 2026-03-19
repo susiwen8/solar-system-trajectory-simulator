@@ -28,7 +28,11 @@ def propagate_state(
     rtol: float = 1e-9,
     atol: float = 1e-9,
 ) -> PropagationResult:
-    sample_times = np.arange(t_span[0], t_span[1] + sample_step_s, sample_step_s)
+    sample_times = np.arange(t_span[0], t_span[1], sample_step_s, dtype=float)
+    if sample_times.size == 0 or sample_times[0] != float(t_span[0]):
+        sample_times = np.insert(sample_times, 0, float(t_span[0]))
+    if sample_times[-1] != float(t_span[1]):
+        sample_times = np.append(sample_times, float(t_span[1]))
 
     def rhs(time_seconds: float, state: np.ndarray) -> np.ndarray:
         position = state[:3]

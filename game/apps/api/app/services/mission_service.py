@@ -1,69 +1,138 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from app.core.dynamics.acceleration import point_mass_acceleration
+from app.core.constants import PLANETARY_BODY_RADII_KM
+from app.core.dynamics.acceleration import combined_point_mass_acceleration
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
+from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
+from app.services.transfer_planner import TransferPlanner
 
 
 @dataclass(frozen=True)
 class MissionPropagationResult:
     reference_frame: str
+    ephemeris_source: str
     samples: List[Dict[str, object]]
     closest_approach: Dict[str, Union[float, str]]
     flight_time_seconds: float
     warnings: List[str]
+    candidates: Optional[List[Dict[str, object]]] = None
+    sequence_bodies: Optional[List[str]] = None
+    score: Optional[float] = None
+    delta_v_km_per_s: Optional[float] = None
+    flyby_events: Optional[List[Dict[str, object]]] = None
 
     def to_dict(self) -> Dict[str, object]:
-        return {
+        payload = {
             "referenceFrame": self.reference_frame,
+            "ephemerisSource": self.ephemeris_source,
             "samples": self.samples,
             "closestApproach": self.closest_approach,
             "flightTimeSeconds": self.flight_time_seconds,
             "warnings": self.warnings,
         }
+        if self.candidates is not None:
+            payload["candidates"] = self.candidates
+        if self.sequence_bodies is not None:
+            payload["sequenceBodies"] = self.sequence_bodies
+        if self.score is not None:
+            payload["score"] = self.score
+        if self.delta_v_km_per_s is not None:
+            payload["deltaVKmPerS"] = self.delta_v_km_per_s
+        if self.flyby_events is not None:
+            payload["flybyEvents"] = self.flyby_events
+        return payload
 
 
 class MissionService:
     def __init__(self, ephemeris) -> None:
         self.ephemeris = ephemeris
+        self.transfer_planner = TransferPlanner(ephemeris)
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
-        if request.initialState.stateVector is None:
-            raise ValueError("Only stateVector missions are supported right now")
+        planner_warnings: List[str] = []
+        if request.initialState.launchFromBody is not None and request.targetBody in OUTER_TARGETS:
+            search_candidates = GravityAssistSearchService(self.ephemeris).search(
+                departure_body=request.departureBody,
+                target_body=request.targetBody,
+                launch_epoch=request.launchEpoch,
+            )
+            if search_candidates:
+                best_candidate = search_candidates[0]
+                warnings = list(best_candidate.warnings)
+                warnings.insert(0, f"Gravity-assist search returned {len(search_candidates)} ranked candidates")
+                return MissionPropagationResult(
+                    reference_frame="heliocentric-inertial",
+                    ephemeris_source=getattr(self.ephemeris, "source_name", "unknown"),
+                    samples=best_candidate.samples,
+                    closest_approach=best_candidate.closest_approach,
+                    flight_time_seconds=best_candidate.total_flight_time_seconds,
+                    warnings=warnings,
+                    candidates=[candidate.to_dict() for candidate in search_candidates],
+                    sequence_bodies=list(best_candidate.sequence_bodies),
+                    score=best_candidate.score,
+                    delta_v_km_per_s=best_candidate.delta_v_km_per_s,
+                    flyby_events=[event.to_dict() for event in best_candidate.flyby_events],
+                )
 
-        sun_state = self.ephemeris.get_body_state("sun", request.launchEpoch)
-        initial_state = np.array(
-            [
-                *request.initialState.stateVector.positionKm,
-                *request.initialState.stateVector.velocityKmPerSec,
-            ],
-            dtype=float,
-        )
+        if request.initialState.stateVector is not None:
+            initial_state = np.array(
+                [
+                    *request.initialState.stateVector.positionKm,
+                    *request.initialState.stateVector.velocityKmPerSec,
+                ],
+                dtype=float,
+            )
+            duration_seconds = float(request.durationSeconds or 3.0 * 24.0 * 3600.0)
+            output_step_seconds = float(request.outputStepSeconds or 6.0 * 3600.0)
+        else:
+            plan = self.transfer_planner.plan_auto_transfer(
+                departure_body=request.departureBody,
+                target_body=request.targetBody,
+                launch_epoch=request.launchEpoch,
+            )
+            initial_state = plan.initial_state
+            duration_seconds = float(request.durationSeconds or plan.duration_seconds)
+            output_step_seconds = float(request.outputStepSeconds or plan.output_step_seconds)
+            planner_warnings = [
+                f"Auto-transfer delta-v estimate: {plan.delta_v_km_per_s:.2f} km/s",
+                f"Planned arrival miss distance estimate: {plan.miss_distance_km:.0f} km",
+            ]
 
-        def acceleration_fn(_: float, probe_position: np.ndarray) -> np.ndarray:
-            return point_mass_acceleration(np.array(sun_state.position_km), probe_position, sun_state.mu_km3_per_s2)
+        body_state_cache: Dict[str, list] = {}
+
+        def acceleration_fn(time_seconds: float, probe_position: np.ndarray) -> np.ndarray:
+            epoch = _epoch_with_offset(request.launchEpoch, time_seconds)
+            if epoch not in body_state_cache:
+                body_state_cache[epoch] = self.ephemeris.get_all_body_states(epoch)
+            return combined_point_mass_acceleration(
+                body_state_cache[epoch],
+                probe_position,
+                minimum_radius_by_body_km=PLANETARY_BODY_RADII_KM,
+            )
 
         propagation = propagate_state(
             initial_state=initial_state,
-            t_span=(0.0, request.durationSeconds),
-            sample_step_s=request.outputStepSeconds,
+            t_span=(0.0, duration_seconds),
+            sample_step_s=output_step_seconds,
             acceleration_fn=acceleration_fn,
         )
         samples = self._serialize_samples(propagation)
         target_samples = self._target_samples_for_request(request, samples)
         closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
-        warnings = self._compute_warnings(samples)
+        warnings = planner_warnings + self._compute_warnings(samples)
 
         return MissionPropagationResult(
             reference_frame="heliocentric-inertial",
+            ephemeris_source=getattr(self.ephemeris, "source_name", "unknown"),
             samples=samples,
             closest_approach=closest_approach,
-            flight_time_seconds=request.durationSeconds,
+            flight_time_seconds=duration_seconds,
             warnings=warnings,
         )
 

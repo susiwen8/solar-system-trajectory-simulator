@@ -18,10 +18,13 @@ export type MissionRequest = {
   targetBody: Exclude<BodyId, "earth"> | "earth";
   launchEpoch: string;
   initialState: {
-    stateVector: StateVector;
+    stateVector?: StateVector;
+    launchFromBody?: {
+      mode: "autoTransfer";
+    };
   };
-  durationSeconds: number;
-  outputStepSeconds: number;
+  durationSeconds?: number;
+  outputStepSeconds?: number;
 };
 
 export type TrajectorySample = {
@@ -30,16 +33,45 @@ export type TrajectorySample = {
   velocityKmPerSec: [number, number, number];
 };
 
+export type ClosestApproach = {
+  bodyId: string;
+  distanceKm: number;
+  epochSeconds: number;
+};
+
+export type FlybyEvent = {
+  bodyId: string;
+  epoch: string;
+  positionKm: [number, number, number];
+  periapsisAltitudeKm: number;
+  turnAngleDeg: number;
+  inboundVInfinityKmPerS: number;
+  outboundVInfinityKmPerS: number;
+};
+
+export type MissionCandidate = {
+  sequenceBodies: string[];
+  score: number;
+  deltaVKmPerS: number;
+  flightTimeSeconds: number;
+  samples: TrajectorySample[];
+  closestApproach: ClosestApproach;
+  warnings: string[];
+  flybyEvents: FlybyEvent[];
+};
+
 export type TrajectoryResult = {
   referenceFrame: string;
+  ephemerisSource: string;
   samples: TrajectorySample[];
-  closestApproach: {
-    bodyId: string;
-    distanceKm: number;
-    epochSeconds: number;
-  };
+  closestApproach: ClosestApproach;
   flightTimeSeconds: number;
   warnings: string[];
+  candidates?: MissionCandidate[];
+  sequenceBodies?: string[];
+  score?: number;
+  deltaVKmPerS?: number;
+  flybyEvents?: FlybyEvent[];
 };
 
 export type ScenePoint = {
@@ -54,10 +86,12 @@ export type BodyState = {
   positionKm: [number, number, number];
   velocityKmPerSec: [number, number, number];
   muKm3PerS2: number;
+  sourceName: string;
 };
 
 export type EphemerisBodiesResponse = {
   referenceFrame: string;
   epoch: string;
+  ephemerisSource: string;
   bodies: BodyState[];
 };

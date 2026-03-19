@@ -1,0 +1,249 @@
+export type Language = "en" | "zh";
+
+export const planetLabels: Record<Language, Record<string, string>> = {
+  en: {
+    sun: "sun",
+    mercury: "mercury",
+    venus: "venus",
+    earth: "earth",
+    mars: "mars",
+    jupiter: "jupiter",
+    saturn: "saturn",
+    uranus: "uranus",
+    neptune: "neptune",
+  },
+  zh: {
+    sun: "太阳",
+    mercury: "水星",
+    venus: "金星",
+    earth: "地球",
+    mars: "火星",
+    jupiter: "木星",
+    saturn: "土星",
+    uranus: "天王星",
+    neptune: "海王星",
+  },
+};
+
+export const messages = {
+  en: {
+    languageZh: "中文",
+    languageEn: "EN",
+    deckEyebrow: "Interplanetary Mission Deck",
+    appTitle: "Solar System Trajectory Simulator",
+    appLede:
+      "Configure a heliocentric departure state on the left, then inspect the propagated trajectory in the live flight view.",
+    missionControlPanel: "Mission Control Panel",
+    missionStatus: "Mission Status",
+    primaryFlightView: "Primary Flight View",
+    languageToggle: "Language Toggle",
+    threeCanvas: "Three.js Flight Canvas",
+    referenceFrame: "Reference Frame",
+    currentEpoch: "Current Epoch",
+    ephemerisSource: "Ephemeris Source",
+    propagation: "Propagation",
+    standby: "Standby",
+    running: "Running",
+    runningPropagation: "Running propagation...",
+    ephemerisRequestFailed: "Ephemeris request failed",
+    propagationRequestFailed: "Propagation request failed",
+    telemetrySnapshot: "Telemetry Snapshot",
+    readyTitle: "Ready for first propagation",
+    readyBody:
+      "Launch a trajectory to populate closest approach, warning flags, and flight time telemetry in this console.",
+    missionSummary: "Mission Summary",
+    candidatePlans: "Gravity-Assist Candidates",
+    candidatePlansBody: "Compare ranked assist sequences and switch the active trajectory.",
+    scoreLabel: "Score",
+    sequenceLabel: "Sequence",
+    deltaVLabel: "Delta-v",
+    flybyCountLabel: "Flybys",
+    flybyEventsLabel: "Flyby Events",
+    selectedCandidateLabel: "Active Plan",
+    closestApproach: "Closest Approach",
+    target: "Target",
+    distance: "Distance",
+    flightTime: "Flight Time",
+    dayUnit: "days",
+    ephemeris: "Ephemeris",
+    noWarnings: "No warnings",
+    primaryView: "Primary View",
+    theatreTitle: "3D Flight Theatre",
+    theatreCopy:
+      "The main canvas stays dedicated to the solar system view so trajectory playback remains the center of the experience.",
+    visualStandby: "Visual standby",
+    paintTrajectory: "Run a mission to paint the trajectory",
+    standbyBody:
+      "The scene will render the probe path, major bodies, and timeline playback once propagation completes.",
+    trajectoryScene: "Trajectory Scene",
+    fixedBirdsEye: "Fixed bird's-eye Three.js view",
+    currentEpochPending: "Current Epoch: pending",
+    targetLabel: "Target",
+    bodyPrefix: "Body",
+    visibleBodies: "Visible Bodies",
+    start: "Start",
+    pause: "Pause",
+    reset: "Reset",
+    playbackStep: "Playback Step",
+    zoomLevel: "Zoom Level",
+    currentSample: "Current Sample",
+    samples: "Samples",
+    warnings: "Warnings",
+    renderer: "Renderer",
+    threeJs: "Three.js",
+    fallback: "Fallback",
+    missionInput: "Mission Input",
+    missionHint:
+      "Auto Transfer plans a full Earth-to-target heliocentric transfer; State Vector keeps the manual propagation workflow.",
+    missionSetup: "Mission Setup",
+    missionSetupBody: "Choose target, epoch, and sample cadence.",
+    departureBody: "Departure Body",
+    trajectoryMode: "Trajectory Mode",
+    targetPlanet: "Target Planet",
+    launchEpoch: "Launch Epoch",
+    missionDuration: "Mission Duration (s)",
+    outputStep: "Output Step (s)",
+    autoTransfer: "Auto Transfer",
+    autoTransferBody:
+      "The backend will compute a target-driven transfer duration, departure burn, and output cadence.",
+    initialStateVector: "Initial State Vector",
+    initialStateBody: "All values are expressed in kilometers and kilometers per second.",
+    positionX: "Position X (km)",
+    positionY: "Position Y (km)",
+    positionZ: "Position Z (km)",
+    velocityX: "Velocity X (km/s)",
+    velocityY: "Velocity Y (km/s)",
+    velocityZ: "Velocity Z (km/s)",
+    propagateTrajectory: "Propagate Trajectory",
+    propagateTrajectoryLoading: "Running propagation...",
+    earthLaunch: "Earth Launch",
+    arrivalSuffix: "Arrival",
+    assistSuffix: "Assist",
+    awaitingPropagation: "Awaiting propagation",
+    stateVector: "State Vector",
+  },
+  zh: {
+    languageZh: "中文",
+    languageEn: "EN",
+    deckEyebrow: "星际任务控制台",
+    appTitle: "太阳系轨迹模拟器",
+    appLede: "左侧配置任务参数，右侧查看真实时间推进的飞行轨迹与太阳系场景。",
+    missionControlPanel: "任务控制面板",
+    missionStatus: "任务状态",
+    primaryFlightView: "主飞行视图",
+    languageToggle: "语言切换",
+    threeCanvas: "Three.js 飞行画布",
+    referenceFrame: "参考系",
+    currentEpoch: "当前时刻",
+    ephemerisSource: "星历来源",
+    propagation: "传播状态",
+    standby: "待命",
+    running: "计算中",
+    runningPropagation: "正在计算轨迹...",
+    ephemerisRequestFailed: "星历请求失败",
+    propagationRequestFailed: "轨迹计算失败",
+    telemetrySnapshot: "遥测概览",
+    readyTitle: "等待首次传播",
+    readyBody: "发起一次任务后，这里会显示最近接近距离、告警信息和飞行时间。",
+    missionSummary: "任务摘要",
+    candidatePlans: "引力辅助候选方案",
+    candidatePlansBody: "比较排序后的弹弓序列，并切换当前显示的轨迹。",
+    scoreLabel: "评分",
+    sequenceLabel: "序列",
+    deltaVLabel: "Delta-v",
+    flybyCountLabel: "飞越次数",
+    flybyEventsLabel: "飞越事件",
+    selectedCandidateLabel: "当前方案",
+    closestApproach: "最近接近",
+    target: "目标",
+    distance: "距离",
+    flightTime: "飞行时间",
+    dayUnit: "天",
+    ephemeris: "星历",
+    noWarnings: "无告警",
+    primaryView: "主视图",
+    theatreTitle: "3D 飞行场景",
+    theatreCopy: "主画布专注展示太阳系与探测器飞行过程，让轨迹回放始终是画面中心。",
+    visualStandby: "视觉待命",
+    paintTrajectory: "运行任务后显示轨迹",
+    standbyBody: "传播完成后，这里会显示探测器轨迹、主要天体与时间回放。",
+    trajectoryScene: "轨迹场景",
+    fixedBirdsEye: "固定鸟瞰 Three.js 视图",
+    currentEpochPending: "当前时刻：等待中",
+    targetLabel: "目标",
+    bodyPrefix: "天体",
+    visibleBodies: "可见天体",
+    start: "开始",
+    pause: "暂停",
+    reset: "重置",
+    playbackStep: "回放步进",
+    zoomLevel: "缩放",
+    currentSample: "当前样本",
+    samples: "样本数",
+    warnings: "告警",
+    renderer: "渲染器",
+    threeJs: "Three.js",
+    fallback: "降级模式",
+    missionInput: "任务输入",
+    missionHint: "自动转移会规划完整的地球到目标星球转移；状态向量模式则保留手动传播工作流。",
+    missionSetup: "任务设置",
+    missionSetupBody: "选择目标、发射时刻和采样参数。",
+    departureBody: "出发天体",
+    trajectoryMode: "轨迹模式",
+    targetPlanet: "目标星球",
+    launchEpoch: "发射时刻",
+    missionDuration: "任务时长（秒）",
+    outputStep: "输出步长（秒）",
+    autoTransfer: "自动转移",
+    autoTransferBody: "后端会自动计算面向目标的飞行时长、出发速度变化和输出采样节奏。",
+    initialStateVector: "初始状态向量",
+    initialStateBody: "所有数值单位均为千米和千米每秒。",
+    positionX: "位置 X（km）",
+    positionY: "位置 Y（km）",
+    positionZ: "位置 Z（km）",
+    velocityX: "速度 X（km/s）",
+    velocityY: "速度 Y（km/s）",
+    velocityZ: "速度 Z（km/s）",
+    propagateTrajectory: "计算轨迹",
+    propagateTrajectoryLoading: "正在计算轨迹...",
+    earthLaunch: "地球出发",
+    arrivalSuffix: "到达",
+    assistSuffix: "飞越",
+    awaitingPropagation: "等待传播",
+    stateVector: "状态向量",
+  },
+} as const;
+
+export function t(language: Language) {
+  return messages[language];
+}
+
+export function planetLabel(language: Language, bodyId: string) {
+  return planetLabels[language][bodyId] ?? bodyId;
+}
+
+export function localizeWarning(language: Language, warning: string) {
+  if (language === "en") {
+    return warning;
+  }
+
+  const deltaVMatch = warning.match(/^Auto-transfer delta-v estimate: ([\d.]+) km\/s$/);
+  if (deltaVMatch) {
+    return `自动转移 Δv 估算：${deltaVMatch[1]} km/s`;
+  }
+
+  const missDistanceMatch = warning.match(/^Planned arrival miss distance estimate: ([\d.]+) km$/);
+  if (missDistanceMatch) {
+    return `规划到达偏差估算：${missDistanceMatch[1]} km`;
+  }
+
+  if (warning === "Probe distance exceeds the trusted phase-1 operating range") {
+    return "探测器距离超出第一阶段可信工作范围";
+  }
+
+  if (warning === "No trajectory samples were produced") {
+    return "未生成轨迹样本";
+  }
+
+  return warning;
+}
