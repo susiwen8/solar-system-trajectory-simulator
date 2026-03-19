@@ -40,7 +40,7 @@ describe("computeProbeCameraView", () => {
     const view = computeProbeCameraView({
       sample: baseSample,
       bodies: [marsBody],
-      closestApproach: closestApproach("mars", 8_450_000),
+      closestApproach: closestApproach("mars", 28_000_000),
       activeSegment: null,
     });
 

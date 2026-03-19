@@ -5,6 +5,7 @@ import { localizeMissionSegment, planetLabel, t, type Language } from "../../../
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
 import TrajectoryInsetMap from "./TrajectoryInsetMap";
 import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
+import { buildProbeCameraFrame } from "../lib/camera-frame";
 import { advanceCameraMotion, type CameraMotionState } from "../lib/camera-motion";
 import { computeFocusBodyVisualProfile } from "../lib/focus-visuals";
 import { buildInsetMapModel } from "../lib/inset-map";
@@ -580,29 +581,13 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
       scene,
       targetMotion: null,
       setView: (samplePositionKm, view, zoom) => {
-        const probePosition = toThreeVector(samplePositionKm);
-        const forward = toThreeDirection(view.lookDirection);
-        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-        if (right.lengthSq() === 0) {
-          right.set(1, 0, 0);
-        }
-
-        const behindDistance = scaleDistanceKm(Math.abs(view.cameraOffsetKm[0])) * 1.8;
-        const heightOffset = scaleDistanceKm(Math.abs(view.cameraOffsetKm[1])) * 1.2;
-        const lateralOffset = scaleDistanceKm(view.cameraOffsetKm[2]) * 1.8;
-        const lookAheadDistance = scaleDistanceKm(Math.max(Math.abs(view.cameraOffsetKm[0]) * 0.4, 18_000)) * 1.8;
-        const cameraPosition = probePosition
-          .clone()
-          .add(forward.clone().multiplyScalar(-behindDistance))
-          .add(new THREE.Vector3(0, heightOffset, 0))
-          .add(right.clone().multiplyScalar(lateralOffset));
-        const lookAtTarget = probePosition.clone().add(forward.clone().multiplyScalar(lookAheadDistance));
+        const frame = buildProbeCameraFrame(samplePositionKm, view, zoom);
 
         runtime.targetMotion = {
-          position: [cameraPosition.x, cameraPosition.y, cameraPosition.z],
-          lookAt: [lookAtTarget.x, lookAtTarget.y, lookAtTarget.z],
-          fovDeg: view.fovDeg,
-          zoom,
+          position: frame.position,
+          lookAt: frame.lookAt,
+          fovDeg: frame.fovDeg,
+          zoom: frame.zoom,
         };
         if (!runtime.currentMotion) {
           runtime.currentMotion = runtime.targetMotion;

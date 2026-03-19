@@ -15,7 +15,7 @@ export type ProbeProximityState = {
   focusDistanceKm: number | null;
 };
 
-const APPROACH_DISTANCE_KM = 1_000_000;
+const APPROACH_DISTANCE_KM = 10_000_000;
 
 export function resolveProbeProximityState({
   sample,
