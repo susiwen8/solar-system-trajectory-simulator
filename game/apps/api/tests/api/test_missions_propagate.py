@@ -137,7 +137,9 @@ def test_propagate_returns_launch_and_escape_segments() -> None:
     assert response.status_code == 200
     data = response.json()
     assert "segments" in data
+    assert data["segments"][0]["segmentType"] == "launchParkingOrbit"
     segment_types = [segment["segmentType"] for segment in data["segments"]]
     assert "launchParkingOrbit" in segment_types
     assert "earthEscape" in segment_types
     assert "heliocentricCruise" in segment_types
+    assert any(event["type"] == "earthSoiExit" for event in data["missionTimeline"]["events"])
