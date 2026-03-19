@@ -97,6 +97,7 @@ export default function SolarSystemScene({
   const nextEvent = timelineSnapshot.nextEvent;
   const phaseSegments = result.missionTimeline?.phases ?? [];
   const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
+  const activeSegmentDetail = formatActiveSegmentDetail(activeSegment, language);
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -256,6 +257,16 @@ export default function SolarSystemScene({
                   ? `${formatTimeUntil(currentEpoch, nextEvent.epoch, language)} · ${nextEvent.description}`
                   : copy.noUpcomingEvent}
               </p>
+            </div>
+          </div>
+        ) : null}
+
+        {activeSegmentDetail ? (
+          <div className="scene-phase-panel" aria-label={copy.missionSegments}>
+            <div className="scene-phase-panel__section" data-testid="active-segment-detail">
+              <span className="scene-phase-panel__label">{copy.missionSegments}</span>
+              <strong>{localizeMissionSegment(language, activeSegment?.segmentType ?? "")}</strong>
+              <p>{activeSegmentDetail}</p>
             </div>
           </div>
         ) : null}
@@ -979,6 +990,36 @@ function findActiveSegment(segments: MissionSegment[], currentEpoch: string | nu
       return currentTimeMs >= startMs && currentTimeMs <= endMs;
     }) ?? segments[0]
   );
+}
+
+function formatActiveSegmentDetail(segment: MissionSegment | null, language: Language) {
+  if (!segment) {
+    return null;
+  }
+
+  const copy = t(language);
+
+  if (segment.segmentType === "gravityAssistFlyby" && segment.metadata?.bodyId) {
+    const bodyLabel = planetLabel(language, segment.metadata.bodyId);
+    const turnAngle = segment.metadata.turnAngleDeg != null ? `${copy.turnAngle}: ${segment.metadata.turnAngleDeg} deg` : null;
+    const periapsis =
+      segment.metadata.periapsisAltitudeKm != null
+        ? `${copy.periapsisAltitude}: ${Math.round(segment.metadata.periapsisAltitudeKm).toLocaleString("en-US")} km`
+        : null;
+    return [bodyLabel, turnAngle, periapsis].filter(Boolean).join(" · ");
+  }
+
+  if (segment.segmentType === "heliocentricCruise") {
+    const maneuverCount =
+      segment.metadata?.maneuverCount != null ? `${copy.maneuversLabel}: ${segment.metadata.maneuverCount}` : null;
+    const propellant =
+      segment.massSummary?.propellantUsedKg != null
+        ? `${copy.propellantUsed}: ${Math.round(segment.massSummary.propellantUsedKg).toLocaleString("en-US")} kg`
+        : null;
+    return [maneuverCount, propellant].filter(Boolean).join(" · ");
+  }
+
+  return null;
 }
 
 function createAnchorLabel(text: string, color: THREE.Color) {

@@ -495,7 +495,8 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 金星 -> 木星 -> 土星/ }));
 
   expect(await screen.findByText("240 天")).toBeInTheDocument();
-  expect(await screen.findByText(/转向角/)).toBeInTheDocument();
+  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("转向角");
+  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("木星");
 });
 
 it("plans a multi-planet tour and renders ranked tour candidates", async () => {
