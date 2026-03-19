@@ -64,6 +64,7 @@ def plan_tour(request: MissionTourRequest) -> dict:
         "score": best_candidate.score if best_candidate else None,
         "deltaVKmPerS": best_candidate.total_delta_v_km_per_s if best_candidate else None,
         "flybyEvents": list(best_candidate.flyby_events) if best_candidate else [],
+        "segments": list(best_candidate.segments) if best_candidate and best_candidate.segments is not None else [],
         "visitEvents": [event.to_dict() for event in best_candidate.visit_events] if best_candidate else [],
         "legs": [leg.to_dict() for leg in best_candidate.legs] if best_candidate else [],
         "maneuverEvents": list(best_candidate.maneuver_events) if best_candidate and best_candidate.maneuver_events is not None else [],

@@ -27,9 +27,63 @@ function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
   }).format(durationHours);
 }
 
+function formatSegmentDetails(result: TrajectoryResult, language: Language): Array<{ key: string; text: string }> {
+  const copy = t(language);
+  const details: Array<{ key: string; text: string }> = [];
+
+  for (const segment of result.segments ?? []) {
+    if (segment.segmentType === "heliocentricCruise") {
+      const maneuverCount = segment.metadata?.maneuverCount;
+      const deltaVTotal = segment.metadata?.deltaVTotalKmPerS;
+      if (maneuverCount != null) {
+        details.push({
+          key: `${segment.segmentType}-maneuvers`,
+          text: `${copy.maneuversLabel}: ${maneuverCount}`,
+        });
+      }
+      if (deltaVTotal != null) {
+        details.push({
+          key: `${segment.segmentType}-delta-v`,
+          text: `${copy.deltaVLabel}: ${deltaVTotal} km/s`,
+        });
+      }
+      if (segment.massSummary?.propellantUsedKg != null) {
+        details.push({
+          key: `${segment.segmentType}-propellant`,
+          text: `${copy.propellantUsed}: ${formatNumber(segment.massSummary.propellantUsedKg)} kg`,
+        });
+      }
+    }
+
+    if (segment.segmentType === "gravityAssistFlyby") {
+      if (segment.metadata?.turnAngleDeg != null) {
+        details.push({
+          key: `${segment.segmentType}-turn-angle`,
+          text: `${copy.turnAngle}: ${segment.metadata.turnAngleDeg} deg`,
+        });
+      }
+      if (segment.metadata?.periapsisAltitudeKm != null) {
+        details.push({
+          key: `${segment.segmentType}-periapsis`,
+          text: `${copy.periapsisAltitude}: ${formatNumber(segment.metadata.periapsisAltitudeKm)} km`,
+        });
+      }
+      if (segment.metadata?.bodyId) {
+        details.push({
+          key: `${segment.segmentType}-body`,
+          text: `${localizeMissionSegment(language, segment.segmentType)}: ${planetLabel(language, segment.metadata.bodyId)}`,
+        });
+      }
+    }
+  }
+
+  return details;
+}
+
 export default function MissionSummary({ result, language }: MissionSummaryProps) {
   const copy = t(language);
   const segments = result.segments ?? [];
+  const segmentDetails = formatSegmentDetails(result, language);
   return (
     <section className="summary-card" aria-label={copy.missionSummary}>
       <p className="summary-card__eyebrow">{copy.telemetrySnapshot}</p>
@@ -93,6 +147,13 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
               </li>
             ))}
           </ul>
+          {segmentDetails.length > 0 ? (
+            <ul className="summary-warning-list">
+              {segmentDetails.map((detail) => (
+                <li key={detail.key}>{detail.text}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
     </section>

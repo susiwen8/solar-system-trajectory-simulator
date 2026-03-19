@@ -34,6 +34,30 @@ export type ParkingOrbitSummary = {
   inclinationDeg: number;
 };
 
+export type MissionSegmentMassSummary = {
+  massBeforeKg: number;
+  massAfterKg: number;
+  propellantUsedKg: number;
+};
+
+export type MissionSegmentMetadata = {
+  targetBody?: string;
+  maneuverCount?: number;
+  deltaVTotalKmPerS?: number;
+  maneuverStrategy?: string;
+  closestApproachEstimateKm?: number | null;
+  bodyId?: string;
+  periapsisAltitudeKm?: number;
+  turnAngleDeg?: number;
+  inboundVInfinityKmPerS?: number;
+  outboundVInfinityKmPerS?: number;
+  bPlaneLike?: {
+    btKm?: number;
+    brKm?: number;
+    thetaDeg?: number;
+  };
+};
+
 export type MissionSegment = {
   segmentType: string;
   startEpoch: string;
@@ -43,6 +67,8 @@ export type MissionSegment = {
   finalState: MissionSegmentBoundaryState;
   events: MissionTimelineEvent[];
   orbitSummary?: ParkingOrbitSummary | null;
+  massSummary?: MissionSegmentMassSummary | null;
+  metadata?: MissionSegmentMetadata | null;
 };
 
 export type MissionRequest = {
@@ -169,6 +195,7 @@ export type MissionCandidate = {
   closestApproach: ClosestApproach;
   warnings: string[];
   flybyEvents: FlybyEvent[];
+  segments?: MissionSegment[];
   maneuverEvents?: ManeuverEvent[];
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;

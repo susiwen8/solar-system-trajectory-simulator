@@ -320,6 +320,36 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
               outboundVInfinityKmPerS: 6.1
             }
           ],
+          segments: [
+            {
+              segmentType: "gravityAssistFlyby",
+              startEpoch: "2026-07-01T00:00:00.000Z",
+              endEpoch: "2026-07-02T00:00:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-07-01T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                referenceBodyId: "jupiter",
+                positionKm: [778500000, 0, 0],
+                velocityKmPerSec: [0, 6.1, 0]
+              },
+              finalState: {
+                epoch: "2026-07-02T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                referenceBodyId: "jupiter",
+                positionKm: [778500000, 0, 0],
+                velocityKmPerSec: [0, 6.1, 0]
+              },
+              events: [],
+              metadata: {
+                bodyId: "jupiter",
+                periapsisAltitudeKm: 75000,
+                turnAngleDeg: 28,
+                inboundVInfinityKmPerS: 6.1,
+                outboundVInfinityKmPerS: 6.1
+              }
+            }
+          ],
           candidates: [
             {
               sequenceBodies: ["earth", "jupiter", "saturn"],
@@ -339,7 +369,8 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                 epochSeconds: 0
               },
               warnings: [],
-              flybyEvents: []
+              flybyEvents: [],
+              segments: []
             },
             {
               sequenceBodies: ["earth", "venus", "jupiter", "saturn"],
@@ -359,7 +390,47 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                 epochSeconds: 0
               },
               warnings: [],
-              flybyEvents: []
+              flybyEvents: [
+                {
+                  bodyId: "jupiter",
+                  epoch: "2026-07-01T00:00:00.000Z",
+                  positionKm: [778500000, 0, 0],
+                  periapsisAltitudeKm: 75000,
+                  turnAngleDeg: 28,
+                  inboundVInfinityKmPerS: 6.1,
+                  outboundVInfinityKmPerS: 6.1
+                }
+              ],
+              segments: [
+                {
+                  segmentType: "gravityAssistFlyby",
+                  startEpoch: "2026-07-01T00:00:00.000Z",
+                  endEpoch: "2026-07-02T00:00:00.000Z",
+                  samples: [],
+                  initialState: {
+                    epoch: "2026-07-01T00:00:00.000Z",
+                    referenceFrame: "heliocentric-inertial",
+                    referenceBodyId: "jupiter",
+                    positionKm: [778500000, 0, 0],
+                    velocityKmPerSec: [0, 6.1, 0]
+                  },
+                  finalState: {
+                    epoch: "2026-07-02T00:00:00.000Z",
+                    referenceFrame: "heliocentric-inertial",
+                    referenceBodyId: "jupiter",
+                    positionKm: [778500000, 0, 0],
+                    velocityKmPerSec: [0, 6.1, 0]
+                  },
+                  events: [],
+                  metadata: {
+                    bodyId: "jupiter",
+                    periapsisAltitudeKm: 75000,
+                    turnAngleDeg: 28,
+                    inboundVInfinityKmPerS: 6.1,
+                    outboundVInfinityKmPerS: 6.1
+                  }
+                }
+              ]
             }
           ]
         }),
@@ -424,6 +495,7 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 金星 -> 木星 -> 土星/ }));
 
   expect(await screen.findByText("240 天")).toBeInTheDocument();
+  expect(await screen.findByText(/转向角/)).toBeInTheDocument();
 });
 
 it("plans a multi-planet tour and renders ranked tour candidates", async () => {

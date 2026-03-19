@@ -292,6 +292,7 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
     score: candidate.score,
     deltaVKmPerS: candidate.deltaVKmPerS,
     flybyEvents: candidate.flybyEvents,
+    segments: candidate.segments ?? result.segments,
     maneuverEvents: candidate.maneuverEvents ?? result.maneuverEvents,
     finalMassKg: candidate.finalMassKg ?? result.finalMassKg,
     totalPropellantUsedKg: candidate.totalPropellantUsedKg ?? result.totalPropellantUsedKg,

@@ -4,8 +4,10 @@ from itertools import permutations
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from app.schemas.mission import PropulsionConfig
+from app.services.flyby_planner import FlybyPlanner
 from app.services.gravity_assist_search import GravityAssistCandidate, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
+from app.services.mission_segments import segment_to_dict
 from app.services.mission_timeline import build_mission_timeline
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class MissionTourCandidate:
     samples: List[dict]
     warnings: Tuple[str, ...]
     closest_approach: Dict[str, object]
+    segments: Optional[Tuple[dict, ...]] = None
     maneuver_events: Optional[Tuple[dict, ...]] = None
     final_mass_kg: Optional[float] = None
     total_propellant_used_kg: Optional[float] = None
@@ -75,6 +78,8 @@ class MissionTourCandidate:
             "warnings": list(self.warnings),
             "closestApproach": self.closest_approach,
         }
+        if self.segments is not None:
+            payload["segments"] = list(self.segments)
         if self.maneuver_events is not None:
             payload["maneuverEvents"] = list(self.maneuver_events)
         if self.final_mass_kg is not None:
@@ -93,6 +98,7 @@ class MissionTourPlanner:
         self.ephemeris = ephemeris
         self.gravity_assist_search = GravityAssistSearchService(ephemeris)
         self.maneuver_planner = ManeuverPlanner()
+        self.flyby_planner = FlybyPlanner()
 
     def plan_tour(
         self,
@@ -231,6 +237,7 @@ class MissionTourPlanner:
         flyby_events: List[dict] = []
         warnings: List[str] = []
         samples: List[dict] = []
+        segments: List[dict] = []
         epoch_offset = 0.0
         score = 0.0
         total_delta_v = 0.0
@@ -262,6 +269,19 @@ class MissionTourPlanner:
 
             for event in leg_candidate.flyby_events:
                 flyby_events.append(event.to_dict())
+                segments.append(
+                    segment_to_dict(
+                        self.flyby_planner.plan_segment(
+                            body_id=event.body_id,
+                            periapsis_epoch=event.epoch,
+                            periapsis_altitude_km=event.periapsis_altitude_km,
+                            turn_angle_deg=event.turn_angle_deg,
+                            inbound_v_infinity_km_per_s=event.inbound_v_infinity_km_per_s,
+                            outbound_v_infinity_km_per_s=event.outbound_v_infinity_km_per_s,
+                            position_km=event.position_km,
+                        )
+                    )
+                )
 
             for sample_index, sample in enumerate(leg_candidate.samples):
                 if samples and sample_index == 0:
@@ -329,6 +349,7 @@ class MissionTourPlanner:
                 "distanceKm": float(legs[-1].closest_approach_km),
                 "epochSeconds": float(epoch_offset),
             },
+            segments=tuple(segments),
             maneuver_events=maneuver_events,
             final_mass_kg=final_mass_kg,
             total_propellant_used_kg=total_propellant_used_kg,
