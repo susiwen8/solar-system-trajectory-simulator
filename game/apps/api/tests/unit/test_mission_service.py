@@ -150,3 +150,44 @@ def test_phase_a_timeline_includes_parking_orbit_and_earth_escape(bundled_epheme
     phase_types = [phase["type"] for phase in result.mission_timeline["phases"]]
     assert "launchParkingOrbit" in phase_types
     assert "earthEscape" in phase_types
+
+
+def test_mission_service_builds_cruise_segment_metadata_for_auto_transfer(bundled_ephemeris) -> None:
+    from app.schemas.mission import InitialStateInput, MissionRequest
+
+    request = MissionRequest(
+        departureBody="earth",
+        targetBody="mars",
+        launchEpoch="2026-01-01T00:00:00Z",
+        initialState=InitialStateInput(launchFromBody={"mode": "autoTransfer"}),
+    )
+
+    result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
+
+    cruise_segment = next(segment for segment in result.segments if segment["segmentType"] == "heliocentricCruise")
+    assert cruise_segment["metadata"]["targetBody"] == "mars"
+    assert "maneuverCount" in cruise_segment["metadata"]
+    assert "massSummary" in cruise_segment
+
+
+def test_mission_service_keeps_cruise_mass_summary_in_sync_with_propulsion_outputs(bundled_ephemeris) -> None:
+    from app.schemas.mission import InitialStateInput, MissionRequest, PropulsionConfig
+
+    request = MissionRequest(
+        departureBody="earth",
+        targetBody="mars",
+        launchEpoch="2026-01-01T00:00:00Z",
+        initialState=InitialStateInput(launchFromBody={"mode": "autoTransfer"}),
+        propulsionConfig=PropulsionConfig(
+            initialMassKg=1800.0,
+            propellantMassKg=420.0,
+            maxThrustN=0.8,
+            ispSeconds=3200.0,
+        ),
+    )
+
+    result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
+
+    cruise_segment = next(segment for segment in result.segments if segment["segmentType"] == "heliocentricCruise")
+    assert cruise_segment["massSummary"]["massAfterKg"] == result.final_mass_kg
+    assert cruise_segment["massSummary"]["propellantUsedKg"] == result.total_propellant_used_kg

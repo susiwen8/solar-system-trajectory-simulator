@@ -9,10 +9,11 @@ from app.core.dynamics.acceleration import combined_point_mass_acceleration
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
+from app.services.cruise_planner import CruisePlanner
 from app.services.earth_escape_planner import EarthEscapePlanner
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
-from app.services.mission_segments import build_segment_boundary_state, merge_segment_events, segment_to_dict
+from app.services.mission_segments import merge_segment_events, segment_to_dict
 from app.services.mission_timeline import build_mission_timeline
 from app.services.parking_orbit_planner import ParkingOrbitPlanner
 from app.services.transfer_planner import TransferPlanner
@@ -79,6 +80,7 @@ class MissionService:
         self.maneuver_planner = ManeuverPlanner()
         self.parking_orbit_planner = ParkingOrbitPlanner()
         self.earth_escape_planner = EarthEscapePlanner(ephemeris)
+        self.cruise_planner = CruisePlanner()
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
         planner_warnings: List[str] = []
@@ -216,20 +218,16 @@ class MissionService:
             samples = self._serialize_samples(maneuver_propagation)
             target_samples = self._target_samples_for_request(request, samples)
             closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
-            final_mass_kg = (
-                float(maneuver_propagation.samples[-1].mass_kg)
-                if maneuver_propagation.samples and maneuver_propagation.samples[-1].mass_kg is not None
-                else None
-            )
-            total_propellant_used_kg = (
-                round(request.propulsionConfig.initialMassKg - final_mass_kg, 6)
-                if final_mass_kg is not None
-                else None
-            )
             maneuver_events = self.maneuver_planner.build_maneuver_events(
                 launch_epoch=request.launchEpoch,
                 propulsion_config=request.propulsionConfig,
                 burn_segments=burn_segments,
+            )
+            final_mass_kg = float(maneuver_events[-1]["massAfterKg"]) if maneuver_events else None
+            total_propellant_used_kg = (
+                round(float(maneuver_events[0]["massBeforeKg"]) - final_mass_kg, 6)
+                if maneuver_events and final_mass_kg is not None
+                else None
             )
             propulsion_config_payload = request.propulsionConfig.model_dump()
             warnings = [
@@ -262,7 +260,9 @@ class MissionService:
                 request=request,
                 segment_payloads=segment_payloads,
                 samples=samples,
-                duration_seconds=duration_seconds,
+                maneuver_events=maneuver_events,
+                warnings=warnings,
+                closest_approach=closest_approach,
             ),
         )
 
@@ -316,42 +316,26 @@ class MissionService:
         request: MissionRequest,
         segment_payloads: Optional[List[Dict[str, object]]],
         samples: List[Dict[str, object]],
-        duration_seconds: float,
+        maneuver_events: Optional[List[Dict[str, object]]],
+        warnings: List[str],
+        closest_approach: Dict[str, Union[float, str]],
     ) -> Optional[List[Dict[str, object]]]:
         if segment_payloads is None:
             return None
 
-        cruise_start_epoch = request.launchEpoch
-        cruise_end_epoch = _epoch_with_offset(request.launchEpoch, duration_seconds)
-        segment_payloads.append(
-            {
-                "segmentType": "heliocentricCruise",
-                "startEpoch": cruise_start_epoch,
-                "endEpoch": cruise_end_epoch,
-                "referenceFrame": "heliocentric-inertial",
-                "samples": samples,
-                "events": [],
-                "warnings": [],
-                "initialState": build_segment_boundary_state(
-                    epoch=cruise_start_epoch,
-                    reference_frame="heliocentric-inertial",
-                    position_km=samples[0]["positionKm"],
-                    velocity_km_per_s=samples[0]["velocityKmPerSec"],
-                    reference_body_id="sun",
-                ),
-                "finalState": build_segment_boundary_state(
-                    epoch=cruise_end_epoch,
-                    reference_frame="heliocentric-inertial",
-                    position_km=samples[-1]["positionKm"],
-                    velocity_km_per_s=samples[-1]["velocityKmPerSec"],
-                    reference_body_id="sun",
-                ),
-                "metadata": {
-                    "targetBody": request.targetBody,
-                },
-            }
+        cruise_start_epoch = str(segment_payloads[-1]["endEpoch"]) if segment_payloads else request.launchEpoch
+        cruise_plan = self.cruise_planner.plan_segment(
+            launch_epoch=request.launchEpoch,
+            start_epoch=cruise_start_epoch,
+            target_body=request.targetBody,
+            samples=samples,
+            maneuver_events=maneuver_events,
+            warnings=warnings,
+            closest_approach=closest_approach,
         )
+        segment_payloads.append(segment_to_dict(cruise_plan))
         return segment_payloads
+
 
 def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
     start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)

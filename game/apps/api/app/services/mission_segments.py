@@ -21,6 +21,8 @@ def segment_to_dict(segment) -> Dict[str, object]:
         payload["warnings"] = list(segment.warnings)
     if getattr(segment, "metadata", None) is not None:
         payload["metadata"] = dict(segment.metadata)
+    if getattr(segment, "mass_summary", None) is not None:
+        payload["massSummary"] = dict(segment.mass_summary)
     return payload
 
 

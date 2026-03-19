@@ -116,6 +116,10 @@ def test_propagate_returns_propulsion_fields_when_maneuvers_enabled() -> None:
     assert "maneuverEvents" in data
     assert "finalMassKg" in data
     assert "totalPropellantUsedKg" in data
+    cruise_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "heliocentricCruise")
+    assert cruise_segment["metadata"]["maneuverCount"] == len(data["maneuverEvents"])
+    assert cruise_segment["massSummary"]["massAfterKg"] == data["finalMassKg"]
+    assert cruise_segment["massSummary"]["propellantUsedKg"] == data["totalPropellantUsedKg"]
 
 
 def test_propagate_returns_launch_and_escape_segments() -> None:
@@ -142,4 +146,7 @@ def test_propagate_returns_launch_and_escape_segments() -> None:
     assert "launchParkingOrbit" in segment_types
     assert "earthEscape" in segment_types
     assert "heliocentricCruise" in segment_types
+    cruise_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "heliocentricCruise")
+    assert cruise_segment["metadata"]["targetBody"] == "mars"
+    assert "massSummary" in cruise_segment
     assert any(event["type"] == "earthSoiExit" for event in data["missionTimeline"]["events"])

@@ -98,6 +98,12 @@ class MissionSegmentBoundaryState(BaseModel):
     velocityKmPerSec: Tuple[float, float, float]
 
 
+class MissionSegmentMassSummary(BaseModel):
+    massBeforeKg: float = Field(ge=0)
+    massAfterKg: float = Field(ge=0)
+    propellantUsedKg: float = Field(ge=0)
+
+
 class MissionSegment(BaseModel):
     segmentType: str = Field(min_length=1)
     startEpoch: str = Field(min_length=1)
@@ -109,6 +115,7 @@ class MissionSegment(BaseModel):
     initialState: Optional[MissionSegmentBoundaryState] = None
     finalState: Optional[MissionSegmentBoundaryState] = None
     orbitSummary: Optional[ParkingOrbitSummary] = None
+    massSummary: Optional[MissionSegmentMassSummary] = None
     metadata: Dict[str, object] = Field(default_factory=dict)
 
 
