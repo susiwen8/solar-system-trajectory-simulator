@@ -3,6 +3,9 @@ import * as THREE from "three";
 
 import { localizeMissionSegment, planetLabel, t, type Language } from "../../../lib/i18n";
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
+import TrajectoryInsetMap from "./TrajectoryInsetMap";
+import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
+import { buildInsetMapModel } from "../lib/inset-map";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
 import { scaleDistanceKm } from "../lib/scale";
 import {
@@ -11,7 +14,6 @@ import {
   formatSpeedValue,
   type SpeedTelemetryMode,
 } from "../lib/speed-telemetry";
-import { computeBirdsEyeFrame, type BirdsEyeFrame } from "../lib/view";
 
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
@@ -28,14 +30,13 @@ type SolarSystemSceneProps = {
 };
 
 type SceneRuntime = {
-  camera: THREE.OrthographicCamera;
+  camera: THREE.PerspectiveCamera;
   dynamicGroup: THREE.Group;
-  frame: BirdsEyeFrame;
   renderer: THREE.WebGLRenderer;
   resizeObserver: ResizeObserver | null;
   render: () => void;
   scene: THREE.Scene;
-  setFrame: (frame: BirdsEyeFrame) => void;
+  setView: (samplePositionKm: [number, number, number], view: ProbeCameraView, zoom: number) => void;
   setZoom: (zoom: number) => void;
   stop: () => void;
 };
@@ -98,6 +99,22 @@ export default function SolarSystemScene({
   const phaseSegments = result.missionTimeline?.phases ?? [];
   const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
   const activeSegmentDetail = formatActiveSegmentDetail(activeSegment, language);
+  const activeSample = result.samples[Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0))] ?? result.samples[0];
+  const cameraView = activeSample
+    ? computeProbeCameraView({
+        sample: activeSample,
+        bodies,
+        closestApproach: result.closestApproach,
+        activeSegment,
+      })
+    : null;
+  const insetMapModel = buildInsetMapModel({
+    samples: result.samples,
+    bodies,
+    closestApproach: result.closestApproach,
+    selectedSampleIndex,
+    flybyEvents: result.flybyEvents ?? [],
+  });
   const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
     { key: "speed", label: copy.speedModeMagnitude },
     { key: "vx", label: copy.speedModeVx },
@@ -136,8 +153,8 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language);
-  }, [bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language]);
+    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, activeSegment, zoomLevel);
+  }, [activeSegment, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language, zoomLevel]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
@@ -152,7 +169,8 @@ export default function SolarSystemScene({
       <div className="scene-shell__hud">
         <div className="scene-shell__hud-copy">
           <p className="eyebrow">{copy.trajectoryScene}</p>
-          <h3>{copy.fixedBirdsEye}</h3>
+          <h3>{copy.probePerspective}</h3>
+          <p>{formatProbeViewMode(cameraView?.mode ?? "cruise-follow", language)}</p>
           <p>{currentEpoch ? `${copy.currentEpoch}: ${currentEpoch}` : copy.currentEpochPending}</p>
         </div>
 
@@ -171,6 +189,8 @@ export default function SolarSystemScene({
         }}
       >
         <canvas ref={canvasRef} aria-label={copy.threeCanvas} className="scene-canvas" />
+
+        <TrajectoryInsetMap model={insetMapModel} language={language} />
 
         <div className="scene-telemetry" aria-label={copy.speedTelemetry}>
           <div className="scene-telemetry__header">
@@ -215,6 +235,41 @@ export default function SolarSystemScene({
           />
         </div>
 
+        <div className="scene-overlay-stack scene-overlay-stack--left">
+          {result.missionTimeline ? (
+            <div className="scene-phase-panel" aria-label={copy.phaseTimeline}>
+              <div className="scene-phase-panel__section">
+                <span className="scene-phase-panel__label">{copy.currentPhase}</span>
+                <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
+                <p>{currentPhase?.description ?? copy.currentEpochPending}</p>
+              </div>
+              <div className="scene-phase-panel__section">
+                <span className="scene-phase-panel__label">{copy.missionObjective}</span>
+                <strong>{result.missionTimeline.currentObjective ?? planetLabel(language, result.closestApproach.bodyId)}</strong>
+              </div>
+              <div className="scene-phase-panel__section">
+                <span className="scene-phase-panel__label">{copy.nextEvent}</span>
+                <strong>{nextEvent?.title ?? copy.noUpcomingEvent}</strong>
+                <p>
+                  {nextEvent && currentEpoch
+                    ? `${formatTimeUntil(currentEpoch, nextEvent.epoch, language)} · ${nextEvent.description}`
+                    : copy.noUpcomingEvent}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {activeSegmentDetail ? (
+            <div className="scene-phase-panel" aria-label={copy.missionSegments}>
+              <div className="scene-phase-panel__section" data-testid="active-segment-detail">
+                <span className="scene-phase-panel__label">{copy.missionSegments}</span>
+                <strong>{localizeMissionSegment(language, activeSegment?.segmentType ?? "")}</strong>
+                <p>{activeSegmentDetail}</p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         {(activeManeuver || upcomingManeuver) ? (
           <div className="scene-maneuver-panel" aria-label={copy.maneuverEventsLabel}>
             <span className="scene-maneuver-panel__label">
@@ -235,39 +290,6 @@ export default function SolarSystemScene({
                 <strong>{formatMassKg((activeManeuver ?? upcomingManeuver)?.massAfterKg ?? 0)}</strong>
               </div>
             ) : null}
-          </div>
-        ) : null}
-
-        {result.missionTimeline ? (
-          <div className="scene-phase-panel" aria-label={copy.phaseTimeline}>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.currentPhase}</span>
-              <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
-              <p>{currentPhase?.description ?? copy.currentEpochPending}</p>
-            </div>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.missionObjective}</span>
-              <strong>{result.missionTimeline.currentObjective ?? planetLabel(language, result.closestApproach.bodyId)}</strong>
-            </div>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.nextEvent}</span>
-              <strong>{nextEvent?.title ?? copy.noUpcomingEvent}</strong>
-              <p>
-                {nextEvent && currentEpoch
-                  ? `${formatTimeUntil(currentEpoch, nextEvent.epoch, language)} · ${nextEvent.description}`
-                  : copy.noUpcomingEvent}
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {activeSegmentDetail ? (
-          <div className="scene-phase-panel" aria-label={copy.missionSegments}>
-            <div className="scene-phase-panel__section" data-testid="active-segment-detail">
-              <span className="scene-phase-panel__label">{copy.missionSegments}</span>
-              <strong>{localizeMissionSegment(language, activeSegment?.segmentType ?? "")}</strong>
-              <p>{activeSegmentDetail}</p>
-            </div>
           </div>
         ) : null}
       </div>
@@ -488,9 +510,9 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2("#07111e", 0.0015);
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
-    camera.position.set(0, 260, 0.01);
-    camera.up.set(0, 0, -1);
+    const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 4000);
+    camera.position.set(0, 32, 84);
+    camera.up.set(0, 1, 0);
     camera.lookAt(0, 0, 0);
 
     const ambient = new THREE.AmbientLight("#8aa7d9", 1.9);
@@ -510,14 +532,7 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     const resize = () => {
       const width = Math.max(surface.clientWidth, 1);
       const height = Math.max(surface.clientHeight, 1);
-      const frustumHeight = runtime.frame.halfSpan * 2;
-      const aspect = width / height;
-      camera.left = (-frustumHeight * aspect) / 2;
-      camera.right = (frustumHeight * aspect) / 2;
-      camera.top = frustumHeight / 2;
-      camera.bottom = -frustumHeight / 2;
-      camera.position.set(runtime.frame.center.x, 260, runtime.frame.center.z + 0.01);
-      camera.lookAt(runtime.frame.center.x, 0, runtime.frame.center.z);
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
       render();
@@ -526,17 +541,35 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     const runtime: SceneRuntime = {
       camera,
       dynamicGroup,
-      frame: {
-        center: { x: 0, z: 0 },
-        halfSpan: 60,
-      },
       renderer,
       render,
       resizeObserver: null,
       scene,
-      setFrame: (frame: BirdsEyeFrame) => {
-        runtime.frame = frame;
-        resize();
+      setView: (samplePositionKm, view, zoom) => {
+        const probePosition = toThreeVector(samplePositionKm);
+        const forward = toThreeDirection(view.lookDirection);
+        const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+        if (right.lengthSq() === 0) {
+          right.set(1, 0, 0);
+        }
+
+        const behindDistance = scaleDistanceKm(Math.abs(view.cameraOffsetKm[0])) * 1.8;
+        const heightOffset = scaleDistanceKm(Math.abs(view.cameraOffsetKm[1])) * 1.2;
+        const lateralOffset = scaleDistanceKm(view.cameraOffsetKm[2]) * 1.8;
+        const lookAheadDistance = scaleDistanceKm(Math.max(Math.abs(view.cameraOffsetKm[0]) * 0.4, 18_000)) * 1.8;
+        const cameraPosition = probePosition
+          .clone()
+          .add(forward.clone().multiplyScalar(-behindDistance))
+          .add(new THREE.Vector3(0, heightOffset, 0))
+          .add(right.clone().multiplyScalar(lateralOffset));
+        const lookAtTarget = probePosition.clone().add(forward.clone().multiplyScalar(lookAheadDistance));
+
+        camera.fov = view.fovDeg;
+        camera.zoom = zoom;
+        camera.position.copy(cameraPosition);
+        camera.lookAt(lookAtTarget);
+        camera.updateProjectionMatrix();
+        render();
       },
       setZoom: (zoom: number) => {
         camera.zoom = zoom;
@@ -567,10 +600,24 @@ function syncSceneObjects(
   launchEpoch: string | null,
   selectedSampleIndex: number,
   hoveredBodyId: string | null,
-  language: Language
+  language: Language,
+  activeSegment: MissionSegment | null,
+  zoomLevel: number,
 ) {
   clearGroup(runtime.dynamicGroup);
-  runtime.setFrame(computeBirdsEyeFrame(result.samples, bodies));
+  const activeSample = result.samples[Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0))] ?? result.samples[0];
+  if (activeSample) {
+    runtime.setView(
+      activeSample.positionKm,
+      computeProbeCameraView({
+        sample: activeSample,
+        bodies,
+        closestApproach: result.closestApproach,
+        activeSegment,
+      }),
+      zoomLevel,
+    );
+  }
 
   const launchSample = result.samples[0];
   const closestSample = findSampleForEpoch(result, result.closestApproach.epochSeconds);
@@ -600,10 +647,10 @@ function syncSceneObjects(
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
   runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
   runtime.dynamicGroup.add(createTrajectoryMarkers(result.samples.slice(0, selectedSampleIndex + 1)));
-  runtime.dynamicGroup.add(createProbeMarker(result.samples[selectedSampleIndex]));
+  runtime.dynamicGroup.add(createProbeMarker(activeSample));
 
   for (const body of bodies) {
-    runtime.dynamicGroup.add(createBodyMesh(body, hoveredBodyId === body.bodyId));
+    runtime.dynamicGroup.add(createBodyMesh(body, hoveredBodyId === body.bodyId, body.bodyId === activeSegment?.metadata?.bodyId || body.bodyId === result.closestApproach.bodyId));
   }
 
   runtime.render();
@@ -740,14 +787,14 @@ function createAnchorMesh(
   return group;
 }
 
-function createBodyMesh(body: BodyState, isHighlighted: boolean) {
+function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean) {
   const radius = bodyRadii[body.bodyId] ?? 1.8;
   const group = new THREE.Group();
   const geometry = new THREE.SphereGeometry(radius, 24, 24);
   const material = new THREE.MeshStandardMaterial({
     color: bodyColors[body.bodyId] ?? "#f5f3ed",
-    emissive: body.bodyId === "sun" || isHighlighted ? bodyColors[body.bodyId] ?? "#f5f3ed" : "#000000",
-    emissiveIntensity: body.bodyId === "sun" ? 1.6 : isHighlighted ? 1.15 : 0,
+    emissive: body.bodyId === "sun" || isHighlighted || isFocusBody ? bodyColors[body.bodyId] ?? "#f5f3ed" : "#000000",
+    emissiveIntensity: body.bodyId === "sun" ? 1.6 : isFocusBody ? 1.35 : isHighlighted ? 1.15 : 0,
     metalness: 0.1,
     roughness: 0.8,
   });
@@ -766,8 +813,8 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean) {
   group.position.copy(toThreeVector(body.positionKm));
   group.add(orbitMarker);
   group.add(mesh);
-  if (isHighlighted) {
-    group.scale.setScalar(1.2);
+  if (isHighlighted || isFocusBody) {
+    group.scale.setScalar(isFocusBody ? 2.2 : 1.2);
   }
   return group;
 }
@@ -897,6 +944,14 @@ function toThreeVector(positionKm: [number, number, number]) {
   );
 }
 
+function toThreeDirection(direction: [number, number, number]) {
+  const vector = new THREE.Vector3(direction[0], direction[2] * 0.45, direction[1]).normalize();
+  if (vector.lengthSq() === 0) {
+    return new THREE.Vector3(0, 0, 1);
+  }
+  return vector;
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -924,6 +979,26 @@ function formatTimeUntil(currentEpoch: string, eventEpoch: string, language: Lan
 
   const hours = deltaSeconds / 3_600;
   return language === "zh" ? `${hours.toFixed(1)} 小时后` : `in ${hours.toFixed(1)} hours`;
+}
+
+function formatProbeViewMode(mode: ProbeCameraView["mode"], language: Language) {
+  if (language === "zh") {
+    if (mode === "flyby-emphasis") {
+      return "飞越增强视角";
+    }
+    if (mode === "approach-emphasis") {
+      return "目标接近视角";
+    }
+    return "混合跟随视角";
+  }
+
+  if (mode === "flyby-emphasis") {
+    return "Flyby emphasis";
+  }
+  if (mode === "approach-emphasis") {
+    return "Approach emphasis";
+  }
+  return "Hybrid follow view";
 }
 
 function phaseWidthPercent(

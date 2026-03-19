@@ -262,6 +262,8 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByLabelText("Three.js 飞行画布")).toBeInTheDocument();
   expect(await screen.findByLabelText("缩放")).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "开始" })).toBeInTheDocument();
+  expect(await screen.findByText("探测器视角")).toBeInTheDocument();
+  expect(await screen.findByTestId("trajectory-inset-map")).toBeInTheDocument();
   expect(await screen.findByText("当前阶段")).toBeInTheDocument();
   expect(await screen.findByText("下一事件")).toBeInTheDocument();
   expect(await screen.findByTestId("mission-phase-timeline")).toBeInTheDocument();
@@ -497,6 +499,7 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
   expect(await screen.findByText("240 天")).toBeInTheDocument();
   expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("转向角");
   expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("木星");
+  expect(await screen.findByTestId("trajectory-inset-map")).toHaveTextContent("木星");
 });
 
 it("plans a multi-planet tour and renders ranked tour candidates", async () => {
