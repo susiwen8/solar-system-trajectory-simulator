@@ -31,6 +31,51 @@ make api-test
 make web-test
 ```
 
+## Finite-Thrust Corrections
+
+The simulator now supports short automatic finite-thrust correction burns on both single-target missions and multi-planet tours.
+
+### API Request Shape
+
+Add a `propulsionConfig` block to either `POST /missions/propagate` or `POST /missions/plan-tour`:
+
+```json
+{
+  "departureBody": "earth",
+  "targetBody": "mars",
+  "launchEpoch": "2026-01-01T00:00:00Z",
+  "initialState": {
+    "launchFromBody": {
+      "mode": "autoTransfer"
+    }
+  },
+  "propulsionConfig": {
+    "initialMassKg": 1800,
+    "propellantMassKg": 420,
+    "maxThrustN": 0.8,
+    "ispSeconds": 3200
+  }
+}
+```
+
+When enabled, the backend will:
+
+- solve the normal gravity-first baseline trajectory
+- place up to three automatic correction burns
+- re-propagate the mission with finite-thrust arcs and mass depletion
+
+### Response Fields
+
+Finite-thrust-enabled results may include:
+
+- `maneuverEvents`
+- `finalMassKg`
+- `totalPropellantUsedKg`
+- `propulsionConfig`
+- `samples[].massKg`
+
+The browser UI exposes the same capability through the `启用有限推力修正` toggle in the mission form.
+
 ### Importing JPL Horizons Data
 
 If you export heliocentric `VECTORS` tables from JPL Horizons as CSV, you can convert them into the simulator's ephemeris format:
