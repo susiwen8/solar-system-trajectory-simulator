@@ -9,6 +9,14 @@ export type FocusBodyVisualProfile = {
   bandOpacity: number;
 };
 
+export type PlanetaryRingProfile = {
+  innerScale: number;
+  outerScale: number;
+  opacity: number;
+  color: string;
+  tiltRad: number;
+};
+
 export function computeFocusBodyVisualProfile(
   bodyId: string,
   mode: ProbeCameraView["mode"],
@@ -31,5 +39,19 @@ export function computeFocusBodyVisualProfile(
     haloOpacity: mode === "flyby-emphasis" ? 0.24 : mode === "approach-emphasis" ? 0.2 : 0.08,
     bandCount: 0,
     bandOpacity: 0,
+  };
+}
+
+export function getPlanetaryRingProfile(bodyId: string): PlanetaryRingProfile | null {
+  if (bodyId !== "saturn") {
+    return null;
+  }
+
+  return {
+    innerScale: 1.35,
+    outerScale: 2.2,
+    opacity: 0.72,
+    color: "#d8c69b",
+    tiltRad: 0.48,
   };
 }

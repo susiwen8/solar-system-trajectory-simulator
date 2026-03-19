@@ -9,6 +9,7 @@ from app.core.dynamics.acceleration import combined_point_mass_acceleration
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
 from app.schemas.mission import MissionRequest
+from app.services.arrival_capture_planner import ArrivalCapturePlanner
 from app.services.cruise_planner import CruisePlanner
 from app.services.earth_escape_planner import EarthEscapePlanner
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
@@ -81,6 +82,7 @@ class MissionService:
         self.parking_orbit_planner = ParkingOrbitPlanner()
         self.earth_escape_planner = EarthEscapePlanner(ephemeris)
         self.cruise_planner = CruisePlanner()
+        self.arrival_capture_planner = ArrivalCapturePlanner()
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
         planner_warnings: List[str] = []
@@ -235,6 +237,15 @@ class MissionService:
                 f"Finite-thrust planner scheduled {len(maneuver_events)} correction burns",
             ]
 
+        segments = self._build_segments(
+            request=request,
+            segment_payloads=segment_payloads,
+            samples=samples,
+            maneuver_events=maneuver_events,
+            warnings=warnings,
+            closest_approach=closest_approach,
+        )
+
         return MissionPropagationResult(
             reference_frame="heliocentric-inertial",
             ephemeris_source=getattr(self.ephemeris, "source_name", "unknown"),
@@ -253,17 +264,10 @@ class MissionService:
                 samples=samples,
                 closest_approach=_materialize_closest_approach_epoch(request.launchEpoch, closest_approach),
                 maneuver_events=maneuver_events,
-                segment_events=merge_segment_events(segment_payloads or []),
+                segment_events=merge_segment_events(segments or []),
                 departure_body=request.departureBody,
             ),
-            segments=self._build_segments(
-                request=request,
-                segment_payloads=segment_payloads,
-                samples=samples,
-                maneuver_events=maneuver_events,
-                warnings=warnings,
-                closest_approach=closest_approach,
-            ),
+            segments=segments,
         )
 
     def _serialize_samples(self, propagation: PropagationResult) -> List[Dict[str, object]]:
@@ -334,6 +338,13 @@ class MissionService:
             closest_approach=closest_approach,
         )
         segment_payloads.append(segment_to_dict(cruise_plan))
+        arrival_capture_plan = self.arrival_capture_planner.plan_capture(
+            body_id=request.targetBody,
+            arrival_epoch=_epoch_with_offset(request.launchEpoch, float(closest_approach["epochSeconds"])),
+            heliocentric_sample=_closest_sample(samples, float(closest_approach["epochSeconds"])),
+            orbit_summary=_default_arrival_orbit_summary(request.targetBody),
+        )
+        segment_payloads.append(segment_to_dict(arrival_capture_plan))
         return segment_payloads
 
 
@@ -351,3 +362,17 @@ def _materialize_closest_approach_epoch(
     if "epochSeconds" in payload and "epoch" not in payload:
         payload["epoch"] = _epoch_with_offset(base_epoch, float(payload["epochSeconds"]))
     return payload
+
+
+def _closest_sample(samples: List[Dict[str, object]], epoch_seconds: float) -> Dict[str, object]:
+    return min(samples, key=lambda sample: abs(float(sample["epochSeconds"]) - epoch_seconds))
+
+
+def _default_arrival_orbit_summary(target_body: str) -> Dict[str, object]:
+    body_radius_km = PLANETARY_BODY_RADII_KM[target_body]
+    return {
+        "isBound": True,
+        "periapsisKm": body_radius_km + 500.0,
+        "apoapsisKm": body_radius_km + 1_500.0,
+        "inclinationDeg": 25.0,
+    }

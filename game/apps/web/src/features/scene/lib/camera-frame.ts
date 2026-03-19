@@ -1,4 +1,5 @@
 import type { ProbeCameraView } from "./camera";
+import type { OrbitCameraState } from "./orbit-camera";
 import { scaleDistanceKm } from "./scale";
 
 export type ProbeCameraFrame = {
@@ -12,11 +13,46 @@ export function buildProbeCameraFrame(
   samplePositionKm: [number, number, number],
   view: ProbeCameraView,
   zoom: number,
+  orbitState?: OrbitCameraState,
 ): ProbeCameraFrame {
   const probePosition = toSceneVector(samplePositionKm);
   const forward = toSceneDirection(view.lookDirection);
-  const right = normalizeSceneDirection(cross(forward, [0, 1, 0]));
+  const right = resolveRightVector(forward);
+  const up = normalizeSceneDirection(cross(right, forward));
   const cinematic = cinematicOffsets(view.mode);
+
+  if (orbitState) {
+    const distanceScale = orbitState.radiusScale;
+    const horizontalDistance = cinematic.behind * distanceScale;
+    const lateralDistance = cinematic.lateral * distanceScale;
+    const yawCos = Math.cos(orbitState.yawRad);
+    const yawSin = Math.sin(orbitState.yawRad);
+    const pitchCos = Math.cos(orbitState.pitchRad);
+    const pitchSin = Math.sin(orbitState.pitchRad);
+
+    const behindOffset = horizontalDistance * pitchCos * yawCos;
+    const lateralOffset = horizontalDistance * pitchCos * yawSin + lateralDistance * yawCos;
+    const verticalOffset = cinematic.height + horizontalDistance * pitchSin;
+    const lookAhead = cinematic.lookAhead * Math.max(0.18, pitchCos);
+
+    const position: [number, number, number] = [
+      probePosition[0] - forward[0] * behindOffset + right[0] * lateralOffset + up[0] * verticalOffset,
+      probePosition[1] - forward[1] * behindOffset + right[1] * lateralOffset + up[1] * verticalOffset,
+      probePosition[2] - forward[2] * behindOffset + right[2] * lateralOffset + up[2] * verticalOffset,
+    ];
+    const lookAt: [number, number, number] = [
+      probePosition[0] + forward[0] * lookAhead + up[0] * cinematic.lookLift,
+      probePosition[1] + forward[1] * lookAhead + up[1] * cinematic.lookLift,
+      probePosition[2] + forward[2] * lookAhead + up[2] * cinematic.lookLift,
+    ];
+
+    return {
+      position,
+      lookAt,
+      fovDeg: view.fovDeg,
+      zoom,
+    };
+  }
 
   const position: [number, number, number] = [
     probePosition[0] - forward[0] * cinematic.behind + right[0] * cinematic.lateral,
@@ -86,6 +122,18 @@ function normalizeSceneDirection(direction: [number, number, number]): [number, 
 
 function toSceneDirection(direction: [number, number, number]): [number, number, number] {
   return normalizeSceneDirection([direction[0], direction[2] * 0.45, direction[1]]);
+}
+
+function resolveRightVector(forward: [number, number, number]) {
+  const worldUp: [number, number, number] = [0, 1, 0];
+  const right = cross(forward, worldUp);
+  const magnitude = Math.sqrt(right[0] * right[0] + right[1] * right[1] + right[2] * right[2]);
+
+  if (magnitude <= 0.0001) {
+    return [1, 0, 0] as [number, number, number];
+  }
+
+  return normalizeSceneDirection(right);
 }
 
 function cross(left: [number, number, number], right: [number, number, number]): [number, number, number] {

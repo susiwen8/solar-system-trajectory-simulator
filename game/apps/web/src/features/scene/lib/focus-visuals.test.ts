@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { computeFocusBodyVisualProfile } from "./focus-visuals";
+import {
+  computeFocusBodyVisualProfile,
+  getPlanetaryRingProfile,
+} from "./focus-visuals";
 
 describe("computeFocusBodyVisualProfile", () => {
   it("keeps cruise visuals restrained for ordinary focus bodies", () => {
@@ -28,5 +31,14 @@ describe("computeFocusBodyVisualProfile", () => {
     expect(profile.bandOpacity).toBeGreaterThan(0.15);
     expect(profile.haloScale).toBeGreaterThan(1.25);
     expect(profile.atmosphereOpacity).toBeGreaterThan(0.2);
+  });
+});
+
+describe("getPlanetaryRingProfile", () => {
+  it("only gives Saturn a prominent ring system", () => {
+    expect(getPlanetaryRingProfile("saturn")).toBeTruthy();
+    expect(getPlanetaryRingProfile("earth")).toBeNull();
+    expect(getPlanetaryRingProfile("mars")).toBeNull();
+    expect(getPlanetaryRingProfile("jupiter")).toBeNull();
   });
 });

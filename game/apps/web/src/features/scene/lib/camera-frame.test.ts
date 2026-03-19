@@ -61,4 +61,55 @@ describe("buildProbeCameraFrame", () => {
     expect(Math.abs(frame.position[0] - frame.lookAt[0])).toBeGreaterThan(3);
     expect(Math.abs(frame.position[2] - frame.lookAt[2])).toBeGreaterThan(4);
   });
+
+  it("rotates the cruise camera around the probe when yaw changes", () => {
+    const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15, {
+      yawRad: Math.PI / 2,
+      pitchRad: 0.22,
+      radiusScale: 1,
+    });
+
+    expect(Math.abs(frame.position[0] - frame.lookAt[0])).toBeGreaterThan(6);
+  });
+
+  it("moves the camera higher when pitch increases", () => {
+    const low = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15, {
+      yawRad: 0,
+      pitchRad: -0.1,
+      radiusScale: 1,
+    });
+    const high = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15, {
+      yawRad: 0,
+      pitchRad: 0.8,
+      radiusScale: 1,
+    });
+
+    expect(high.position[1]).toBeGreaterThan(low.position[1]);
+  });
+
+  it("moves the camera farther away when radius increases", () => {
+    const near = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15, {
+      yawRad: 0,
+      pitchRad: 0.22,
+      radiusScale: 0.8,
+    });
+    const far = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15, {
+      yawRad: 0,
+      pitchRad: 0.22,
+      radiusScale: 1.6,
+    });
+
+    const nearDistance = Math.hypot(
+      near.position[0] - near.lookAt[0],
+      near.position[1] - near.lookAt[1],
+      near.position[2] - near.lookAt[2],
+    );
+    const farDistance = Math.hypot(
+      far.position[0] - far.lookAt[0],
+      far.position[1] - far.lookAt[1],
+      far.position[2] - far.lookAt[2],
+    );
+
+    expect(farDistance).toBeGreaterThan(nearDistance);
+  });
 });

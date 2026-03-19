@@ -146,7 +146,12 @@ def test_propagate_returns_launch_and_escape_segments() -> None:
     assert "launchParkingOrbit" in segment_types
     assert "earthEscape" in segment_types
     assert "heliocentricCruise" in segment_types
+    assert "arrivalCapture" in segment_types
     cruise_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "heliocentricCruise")
+    arrival_capture_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "arrivalCapture")
     assert cruise_segment["metadata"]["targetBody"] == "mars"
     assert "massSummary" in cruise_segment
     assert any(event["type"] == "earthSoiExit" for event in data["missionTimeline"]["events"])
+    assert arrival_capture_segment["orbitSummary"]["isBound"] is True
+    assert arrival_capture_segment["samples"]
+    assert any(event["type"] == "captureEstablished" for event in data["missionTimeline"]["events"])
