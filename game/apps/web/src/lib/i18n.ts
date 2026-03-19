@@ -73,6 +73,12 @@ export const messages = {
     propellantUsed: "Propellant Used",
     finalMass: "Final Mass",
     maneuverCount: "Maneuver Count",
+    missionSegments: "Mission Segments",
+    turnAngle: "Turn Angle",
+    periapsisAltitude: "Periapsis Altitude",
+    inboundVInfinity: "Inbound v-infinity",
+    outboundVInfinity: "Outbound v-infinity",
+    maneuversLabel: "Maneuvers",
     primaryView: "Primary View",
     theatreTitle: "3D Flight Theatre",
     theatreCopy:
@@ -168,6 +174,10 @@ export const messages = {
     visitSuffix: "Visit",
     awaitingPropagation: "Awaiting propagation",
     stateVector: "State Vector",
+    parkingOrbit: "Parking Orbit",
+    earthEscape: "Earth Escape",
+    heliocentricCruise: "Heliocentric Cruise",
+    gravityAssistFlyby: "Gravity-Assist Flyby",
   },
   zh: {
     languageZh: "中文",
@@ -214,6 +224,12 @@ export const messages = {
     propellantUsed: "推进剂消耗",
     finalMass: "最终质量",
     maneuverCount: "机动次数",
+    missionSegments: "任务分段",
+    turnAngle: "转向角",
+    periapsisAltitude: "近拱点高度",
+    inboundVInfinity: "入轨 v∞",
+    outboundVInfinity: "出轨 v∞",
+    maneuversLabel: "机动次数",
     primaryView: "主视图",
     theatreTitle: "3D 飞行场景",
     theatreCopy: "主画布专注展示太阳系与探测器飞行过程，让轨迹回放始终是画面中心。",
@@ -304,6 +320,10 @@ export const messages = {
     visitSuffix: "拜访",
     awaitingPropagation: "等待传播",
     stateVector: "状态向量",
+    parkingOrbit: "停泊轨道",
+    earthEscape: "地球逃逸",
+    heliocentricCruise: "日心巡航",
+    gravityAssistFlyby: "引力辅助飞越",
   },
 } as const;
 
@@ -339,4 +359,26 @@ export function localizeWarning(language: Language, warning: string) {
   }
 
   return warning;
+}
+
+export function localizeMissionSegment(language: Language, segmentType: string) {
+  const copy = t(language);
+
+  if (segmentType === "launchParkingOrbit") {
+    return copy.parkingOrbit;
+  }
+
+  if (segmentType === "earthEscape") {
+    return copy.earthEscape;
+  }
+
+  if (segmentType === "heliocentricCruise") {
+    return copy.heliocentricCruise;
+  }
+
+  if (segmentType === "gravityAssistFlyby") {
+    return copy.gravityAssistFlyby;
+  }
+
+  return segmentType;
 }

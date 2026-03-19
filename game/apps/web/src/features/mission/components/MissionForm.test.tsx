@@ -19,7 +19,12 @@ it("submits a request for an Earth to Mars mission", async () => {
       request: expect.objectContaining({
         departureBody: "earth",
         targetBody: "mars",
-        initialState: { launchFromBody: { mode: "autoTransfer" } }
+        initialState: { launchFromBody: { mode: "autoTransfer" } },
+        launchProfile: {
+          mode: "parkingOrbit",
+          parkingOrbitAltitudeKm: 300,
+          parkingOrbitInclinationDeg: 28.5,
+        },
       }),
     }),
   );

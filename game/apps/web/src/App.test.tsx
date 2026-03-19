@@ -51,6 +51,74 @@ it("shows the mission metrics panel after propagation results load", async () =>
             distanceKm: 8450000,
             epochSeconds: 21600
           },
+          segments: [
+            {
+              segmentType: "launchParkingOrbit",
+              startEpoch: "2026-01-01T00:00:00.000Z",
+              endEpoch: "2026-01-01T01:30:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T00:00:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 7.7, 0]
+              },
+              finalState: {
+                epoch: "2026-01-01T01:30:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 7.7, 0]
+              },
+              events: [],
+              orbitSummary: {
+                isBound: true,
+                periapsisKm: 6678.1,
+                apoapsisKm: 6678.1,
+                inclinationDeg: 28.5
+              }
+            },
+            {
+              segmentType: "earthEscape",
+              startEpoch: "2026-01-01T01:30:00.000Z",
+              endEpoch: "2026-01-01T07:30:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T01:30:00.000Z",
+                referenceFrame: "earth-centered-inertial",
+                referenceBodyId: "earth",
+                positionKm: [6678.1, 0, 0],
+                velocityKmPerSec: [0, 10.9, 0]
+              },
+              finalState: {
+                epoch: "2026-01-01T07:30:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149597870.7, 0, 0],
+                velocityKmPerSec: [0, 32.7, 0]
+              },
+              events: []
+            },
+            {
+              segmentType: "heliocentricCruise",
+              startEpoch: "2026-01-01T07:30:00.000Z",
+              endEpoch: "2026-01-04T00:00:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-01-01T07:30:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149597870.7, 0, 0],
+                velocityKmPerSec: [0, 32.7, 0]
+              },
+              finalState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                positionKm: [149500000, 643248, 0],
+                velocityKmPerSec: [-0.1, 29.77, 0]
+              },
+              events: []
+            }
+          ],
           missionTimeline: {
             missionStartEpoch: "2026-01-01T00:00:00.000Z",
             missionEndEpoch: "2026-01-04T00:00:00.000Z",
@@ -198,6 +266,9 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByText("下一事件")).toBeInTheDocument();
   expect(await screen.findByTestId("mission-phase-timeline")).toBeInTheDocument();
   expect(screen.getAllByTestId(/mission-phase-segment-/).length).toBeGreaterThan(1);
+  expect((await screen.findAllByText("任务分段")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("停泊轨道")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("地球逃逸")).length).toBeGreaterThan(0);
   expect(
     (await screen.findAllByText("jpl-horizons-file+fallback:bundled-keplerian")).length,
   ).toBeGreaterThan(0);
@@ -249,6 +320,36 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
               outboundVInfinityKmPerS: 6.1
             }
           ],
+          segments: [
+            {
+              segmentType: "gravityAssistFlyby",
+              startEpoch: "2026-07-01T00:00:00.000Z",
+              endEpoch: "2026-07-02T00:00:00.000Z",
+              samples: [],
+              initialState: {
+                epoch: "2026-07-01T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                referenceBodyId: "jupiter",
+                positionKm: [778500000, 0, 0],
+                velocityKmPerSec: [0, 6.1, 0]
+              },
+              finalState: {
+                epoch: "2026-07-02T00:00:00.000Z",
+                referenceFrame: "heliocentric-inertial",
+                referenceBodyId: "jupiter",
+                positionKm: [778500000, 0, 0],
+                velocityKmPerSec: [0, 6.1, 0]
+              },
+              events: [],
+              metadata: {
+                bodyId: "jupiter",
+                periapsisAltitudeKm: 75000,
+                turnAngleDeg: 28,
+                inboundVInfinityKmPerS: 6.1,
+                outboundVInfinityKmPerS: 6.1
+              }
+            }
+          ],
           candidates: [
             {
               sequenceBodies: ["earth", "jupiter", "saturn"],
@@ -268,7 +369,8 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                 epochSeconds: 0
               },
               warnings: [],
-              flybyEvents: []
+              flybyEvents: [],
+              segments: []
             },
             {
               sequenceBodies: ["earth", "venus", "jupiter", "saturn"],
@@ -288,7 +390,47 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                 epochSeconds: 0
               },
               warnings: [],
-              flybyEvents: []
+              flybyEvents: [
+                {
+                  bodyId: "jupiter",
+                  epoch: "2026-07-01T00:00:00.000Z",
+                  positionKm: [778500000, 0, 0],
+                  periapsisAltitudeKm: 75000,
+                  turnAngleDeg: 28,
+                  inboundVInfinityKmPerS: 6.1,
+                  outboundVInfinityKmPerS: 6.1
+                }
+              ],
+              segments: [
+                {
+                  segmentType: "gravityAssistFlyby",
+                  startEpoch: "2026-07-01T00:00:00.000Z",
+                  endEpoch: "2026-07-02T00:00:00.000Z",
+                  samples: [],
+                  initialState: {
+                    epoch: "2026-07-01T00:00:00.000Z",
+                    referenceFrame: "heliocentric-inertial",
+                    referenceBodyId: "jupiter",
+                    positionKm: [778500000, 0, 0],
+                    velocityKmPerSec: [0, 6.1, 0]
+                  },
+                  finalState: {
+                    epoch: "2026-07-02T00:00:00.000Z",
+                    referenceFrame: "heliocentric-inertial",
+                    referenceBodyId: "jupiter",
+                    positionKm: [778500000, 0, 0],
+                    velocityKmPerSec: [0, 6.1, 0]
+                  },
+                  events: [],
+                  metadata: {
+                    bodyId: "jupiter",
+                    periapsisAltitudeKm: 75000,
+                    turnAngleDeg: 28,
+                    inboundVInfinityKmPerS: 6.1,
+                    outboundVInfinityKmPerS: 6.1
+                  }
+                }
+              ]
             }
           ]
         }),
@@ -353,6 +495,8 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 金星 -> 木星 -> 土星/ }));
 
   expect(await screen.findByText("240 天")).toBeInTheDocument();
+  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("转向角");
+  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("木星");
 });
 
 it("plans a multi-planet tour and renders ranked tour candidates", async () => {

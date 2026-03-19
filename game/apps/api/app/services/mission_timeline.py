@@ -27,6 +27,7 @@ def build_mission_timeline(
     maneuver_events: Optional[Sequence[Dict[str, object]]] = None,
     flyby_events: Optional[Sequence[Dict[str, object]]] = None,
     visit_events: Optional[Sequence[Dict[str, object]]] = None,
+    segment_events: Optional[Sequence[Dict[str, object]]] = None,
     departure_body: str = "earth",
 ) -> Dict[str, object]:
     mission_start = _parse_epoch(launch_epoch)
@@ -62,6 +63,15 @@ def build_mission_timeline(
         )
         return event_id
 
+    def add_segment_event(event: Dict[str, object]) -> str:
+        return add_event(
+            str(event["type"]),
+            _parse_epoch(str(event["epoch"])),
+            str(event.get("title", event["type"])),
+            str(event.get("description", event["type"])),
+            str(event["relatedBody"]) if event.get("relatedBody") is not None else None,
+        )
+
     launch_id = add_event(
         "launch",
         mission_start,
@@ -85,28 +95,70 @@ def build_mission_timeline(
             )
         )
 
-    if departure_body == "earth":
-        earth_escape_end = min(mission_end, mission_start + min(timedelta(days=3), max(timedelta(hours=18), (mission_end - mission_start) * 0.05)))
-        if earth_escape_end > launch_end:
-            earth_escape_id = add_event(
-                "earthEscape",
-                earth_escape_end,
-                "Earth Escape",
-                "Exit the Earth departure regime and enter deep-space flight.",
-                "earth",
-            )
+    segment_event_map = {
+        str(event["type"]): event for event in (segment_events or [])
+    }
+    segment_event_ids = {
+        event_type: add_segment_event(event) for event_type, event in segment_event_map.items()
+    }
+
+    if "launchParkingOrbitEnd" in segment_event_map:
+        parking_end = _parse_epoch(str(segment_event_map["launchParkingOrbitEnd"]["epoch"]))
+        if parking_end > mission_start:
             blocks.append(
                 _PhaseBlock(
-                    type="earthEscape",
-                    start=launch_end,
-                    end=earth_escape_end,
-                    title="Earth Escape",
-                    description="Transition through Earth escape into heliocentric cruise.",
+                    type="launchParkingOrbit",
+                    start=mission_start,
+                    end=parking_end,
+                    title="Parking Orbit",
+                    description="Coast in a bound Earth parking orbit before departure.",
                     related_body="earth",
-                    event_ids=(earth_escape_id,),
-                    priority=35,
+                    event_ids=(segment_event_ids["launchParkingOrbitEnd"],),
+                    priority=45,
                 )
             )
+
+    if departure_body == "earth":
+        if "earthSoiExit" in segment_event_map:
+            earth_escape_end = _parse_epoch(str(segment_event_map["earthSoiExit"]["epoch"]))
+            earth_escape_start = mission_start
+            if "launchParkingOrbitEnd" in segment_event_map:
+                earth_escape_start = _parse_epoch(str(segment_event_map["launchParkingOrbitEnd"]["epoch"]))
+            if earth_escape_end > earth_escape_start:
+                blocks.append(
+                    _PhaseBlock(
+                        type="earthEscape",
+                        start=earth_escape_start,
+                        end=earth_escape_end,
+                        title="Earth Escape",
+                        description="Transition through Earth escape into heliocentric cruise.",
+                        related_body="earth",
+                        event_ids=(segment_event_ids["earthSoiExit"],),
+                        priority=35,
+                    )
+                )
+        else:
+            earth_escape_end = min(mission_end, mission_start + min(timedelta(days=3), max(timedelta(hours=18), (mission_end - mission_start) * 0.05)))
+            if earth_escape_end > launch_end:
+                earth_escape_id = add_event(
+                    "earthEscape",
+                    earth_escape_end,
+                    "Earth Escape",
+                    "Exit the Earth departure regime and enter deep-space flight.",
+                    "earth",
+                )
+                blocks.append(
+                    _PhaseBlock(
+                        type="earthEscape",
+                        start=launch_end,
+                        end=earth_escape_end,
+                        title="Earth Escape",
+                        description="Transition through Earth escape into heliocentric cruise.",
+                        related_body="earth",
+                        event_ids=(earth_escape_id,),
+                        priority=35,
+                    )
+                )
 
     for maneuver_event in maneuver_events or []:
         start = _parse_epoch(str(maneuver_event["startEpoch"]))

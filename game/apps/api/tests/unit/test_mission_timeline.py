@@ -64,3 +64,36 @@ def test_build_timeline_includes_maneuver_and_flyby_phases() -> None:
     assert "maneuverExecution" in phase_types
     assert "gravityAssistFlyby" in phase_types
     assert any(event["type"] == "flyby" for event in timeline["events"])
+
+
+def test_build_timeline_preserves_segment_boundary_events() -> None:
+    timeline = build_mission_timeline(
+        launch_epoch="2026-01-01T00:00:00Z",
+        flight_time_seconds=12.0 * 3600.0,
+        target_body="mars",
+        samples=[_sample(0.0), _sample(6.0 * 3600.0), _sample(12.0 * 3600.0)],
+        closest_approach={
+            "bodyId": "mars",
+            "epoch": "2026-01-01T12:00:00Z",
+            "distanceKm": 10_000.0,
+            "epochSeconds": 12.0 * 3600.0,
+        },
+        segment_events=[
+            {
+                "type": "launchParkingOrbitEnd",
+                "epoch": "2026-01-01T01:30:00Z",
+                "title": "Parking Orbit Complete",
+                "description": "Complete the initial parking orbit coast.",
+                "relatedBody": "earth",
+            },
+            {
+                "type": "earthSoiExit",
+                "epoch": "2026-01-01T07:30:00Z",
+                "title": "Earth SOI Exit",
+                "description": "Transition from Earth departure into heliocentric cruise.",
+                "relatedBody": "earth",
+            },
+        ],
+    )
+
+    assert any(event["type"] == "earthSoiExit" for event in timeline["events"])

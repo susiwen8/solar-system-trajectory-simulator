@@ -12,6 +12,13 @@ class LaunchFromBodyInput(BaseModel):
     mode: Literal["autoTransfer"] = "autoTransfer"
 
 
+class LaunchProfile(BaseModel):
+    mode: Literal["parkingOrbit"] = "parkingOrbit"
+    parkingOrbitAltitudeKm: float = Field(default=400.0, gt=0)
+    parkingOrbitInclinationDeg: float = Field(default=28.5, ge=0, le=180)
+    parkingOrbitCoastSeconds: float = Field(default=1800.0, ge=0)
+
+
 class InitialStateInput(BaseModel):
     stateVector: Optional[StateVectorInput] = None
     launchFromBody: Optional[LaunchFromBodyInput] = None
@@ -75,11 +82,49 @@ class MissionTimeline(BaseModel):
     missionEndEpoch: str = Field(min_length=1)
 
 
+class ParkingOrbitSummary(BaseModel):
+    periapsisKm: float = Field(gt=0)
+    apoapsisKm: float = Field(gt=0)
+    inclinationDeg: float = Field(ge=0, le=180)
+    orbitalPeriodSeconds: float = Field(gt=0)
+    isBound: bool = True
+
+
+class MissionSegmentBoundaryState(BaseModel):
+    epoch: str = Field(min_length=1)
+    referenceFrame: str = Field(min_length=1)
+    referenceBodyId: Optional[str] = None
+    positionKm: Tuple[float, float, float]
+    velocityKmPerSec: Tuple[float, float, float]
+
+
+class MissionSegmentMassSummary(BaseModel):
+    massBeforeKg: float = Field(ge=0)
+    massAfterKg: float = Field(ge=0)
+    propellantUsedKg: float = Field(ge=0)
+
+
+class MissionSegment(BaseModel):
+    segmentType: str = Field(min_length=1)
+    startEpoch: str = Field(min_length=1)
+    endEpoch: str = Field(min_length=1)
+    referenceFrame: str = Field(min_length=1)
+    events: List[MissionTimelineEvent] = Field(default_factory=list)
+    samples: List[Dict[str, object]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    initialState: Optional[MissionSegmentBoundaryState] = None
+    finalState: Optional[MissionSegmentBoundaryState] = None
+    orbitSummary: Optional[ParkingOrbitSummary] = None
+    massSummary: Optional[MissionSegmentMassSummary] = None
+    metadata: Dict[str, object] = Field(default_factory=dict)
+
+
 class MissionRequest(BaseModel):
     departureBody: str = Field(min_length=1)
     targetBody: str = Field(min_length=1)
     launchEpoch: str = Field(min_length=1)
     initialState: InitialStateInput
+    launchProfile: Optional[LaunchProfile] = None
     durationSeconds: Optional[float] = Field(default=None, gt=0)
     outputStepSeconds: Optional[float] = Field(default=None, gt=0)
     propulsionConfig: Optional[PropulsionConfig] = None

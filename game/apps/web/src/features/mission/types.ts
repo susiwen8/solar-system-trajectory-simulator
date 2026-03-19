@@ -13,10 +13,69 @@ export type StateVector = {
   velocityKmPerSec: [number, number, number];
 };
 
+export type LaunchProfile = {
+  mode: "parkingOrbit";
+  parkingOrbitAltitudeKm: number;
+  parkingOrbitInclinationDeg: number;
+};
+
+export type MissionSegmentBoundaryState = {
+  epoch: string;
+  referenceBodyId?: string | null;
+  referenceFrame: string;
+  positionKm: [number, number, number];
+  velocityKmPerSec: [number, number, number];
+};
+
+export type ParkingOrbitSummary = {
+  isBound: boolean;
+  periapsisKm: number;
+  apoapsisKm: number;
+  inclinationDeg: number;
+};
+
+export type MissionSegmentMassSummary = {
+  massBeforeKg: number;
+  massAfterKg: number;
+  propellantUsedKg: number;
+};
+
+export type MissionSegmentMetadata = {
+  targetBody?: string;
+  maneuverCount?: number;
+  deltaVTotalKmPerS?: number;
+  maneuverStrategy?: string;
+  closestApproachEstimateKm?: number | null;
+  bodyId?: string;
+  periapsisAltitudeKm?: number;
+  turnAngleDeg?: number;
+  inboundVInfinityKmPerS?: number;
+  outboundVInfinityKmPerS?: number;
+  bPlaneLike?: {
+    btKm?: number;
+    brKm?: number;
+    thetaDeg?: number;
+  };
+};
+
+export type MissionSegment = {
+  segmentType: string;
+  startEpoch: string;
+  endEpoch: string;
+  samples: TrajectorySample[];
+  initialState: MissionSegmentBoundaryState;
+  finalState: MissionSegmentBoundaryState;
+  events: MissionTimelineEvent[];
+  orbitSummary?: ParkingOrbitSummary | null;
+  massSummary?: MissionSegmentMassSummary | null;
+  metadata?: MissionSegmentMetadata | null;
+};
+
 export type MissionRequest = {
   departureBody: "earth";
   targetBody: Exclude<BodyId, "earth"> | "earth";
   launchEpoch: string;
+  launchProfile?: LaunchProfile;
   initialState: {
     stateVector?: StateVector;
     launchFromBody?: {
@@ -136,6 +195,7 @@ export type MissionCandidate = {
   closestApproach: ClosestApproach;
   warnings: string[];
   flybyEvents: FlybyEvent[];
+  segments?: MissionSegment[];
   maneuverEvents?: ManeuverEvent[];
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;
@@ -147,6 +207,7 @@ export type TrajectoryResult = {
   referenceFrame: string;
   ephemerisSource: string;
   samples: TrajectorySample[];
+  segments?: MissionSegment[];
   closestApproach: ClosestApproach;
   flightTimeSeconds: number;
   warnings: string[];

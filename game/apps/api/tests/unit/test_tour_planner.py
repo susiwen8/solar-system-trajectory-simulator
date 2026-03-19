@@ -74,3 +74,18 @@ def test_tour_planner_carries_maneuver_events_into_candidates() -> None:
     assert candidates
     assert candidates[0].maneuver_events is not None
     assert candidates[0].mission_timeline is not None
+
+
+def test_tour_planner_adds_flyby_segments_to_candidates() -> None:
+    planner = build_planner()
+
+    candidates = planner.plan_tour(
+        departure_body="earth",
+        required_visit_bodies=("venus", "jupiter", "saturn"),
+        launch_epoch="2026-01-01T00:00:00Z",
+    )
+
+    assert candidates
+    candidate_with_flyby = next(candidate for candidate in candidates if candidate.flyby_events)
+    assert candidate_with_flyby.segments is not None
+    assert any(segment["segmentType"] == "gravityAssistFlyby" for segment in candidate_with_flyby.segments)

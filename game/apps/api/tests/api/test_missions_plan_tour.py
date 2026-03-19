@@ -24,6 +24,13 @@ def test_plan_tour_returns_ranked_candidates() -> None:
     assert data["candidates"][0]["visitOrder"]
     assert "missionTimeline" in data["candidates"][0]
     assert data["candidates"][0]["missionTimeline"]["events"]
+    assert "segments" in data
+    assert "segments" in data["candidates"][0]
+    assert any(
+        any(segment["segmentType"] == "gravityAssistFlyby" for segment in candidate["segments"])
+        for candidate in data["candidates"]
+        if candidate["flybyEvents"]
+    )
     assert data["candidates"][0]["fullSequenceBodies"][0] == "earth"
     assert set(data["candidates"][0]["visitOrder"]) == {"venus", "jupiter", "saturn"}
 
