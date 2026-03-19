@@ -74,3 +74,20 @@ def test_plan_tour_returns_maneuver_fields_when_propulsion_enabled() -> None:
     assert "maneuverEvents" in data
     assert "finalMassKg" in data
     assert "totalPropellantUsedKg" in data
+
+
+def test_plan_tour_accepts_more_than_four_required_visit_bodies() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/missions/plan-tour",
+        json={
+            "departureBody": "earth",
+            "requiredVisitBodies": ["mercury", "venus", "mars", "jupiter", "saturn"],
+            "launchEpoch": "2026-01-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["candidates"]
+    assert set(data["candidates"][0]["visitOrder"]) == {"mercury", "venus", "mars", "jupiter", "saturn"}
