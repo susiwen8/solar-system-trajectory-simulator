@@ -133,3 +133,20 @@ def test_mission_service_builds_staged_departure_segments(bundled_ephemeris) -> 
         "launchParkingOrbit",
         "earthEscape",
     ]
+
+
+def test_phase_a_timeline_includes_parking_orbit_and_earth_escape(bundled_ephemeris) -> None:
+    from app.schemas.mission import InitialStateInput, MissionRequest
+
+    request = MissionRequest(
+        departureBody="earth",
+        targetBody="mars",
+        launchEpoch="2026-01-01T00:00:00Z",
+        initialState=InitialStateInput(launchFromBody={"mode": "autoTransfer"}),
+    )
+
+    result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
+
+    phase_types = [phase["type"] for phase in result.mission_timeline["phases"]]
+    assert "launchParkingOrbit" in phase_types
+    assert "earthEscape" in phase_types

@@ -12,7 +12,7 @@ from app.schemas.mission import MissionRequest
 from app.services.earth_escape_planner import EarthEscapePlanner
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
-from app.services.mission_segments import build_segment_boundary_state, segment_to_dict
+from app.services.mission_segments import build_segment_boundary_state, merge_segment_events, segment_to_dict
 from app.services.mission_timeline import build_mission_timeline
 from app.services.parking_orbit_planner import ParkingOrbitPlanner
 from app.services.transfer_planner import TransferPlanner
@@ -255,6 +255,7 @@ class MissionService:
                 samples=samples,
                 closest_approach=_materialize_closest_approach_epoch(request.launchEpoch, closest_approach),
                 maneuver_events=maneuver_events,
+                segment_events=merge_segment_events(segment_payloads or []),
                 departure_body=request.departureBody,
             ),
             segments=self._build_segments(

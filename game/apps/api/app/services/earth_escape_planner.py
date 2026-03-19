@@ -21,6 +21,7 @@ class EarthEscapePlanner:
     def __init__(self, ephemeris) -> None:
         self.ephemeris = ephemeris
         self.transfer_planner = TransferPlanner(ephemeris)
+        self.escape_duration_seconds = 6.0 * 3600.0
 
     def plan_escape(
         self,
@@ -34,16 +35,17 @@ class EarthEscapePlanner:
             target_body=target_body,
             launch_epoch=launch_epoch,
         )
-        escape_epoch = parking_final_state["epoch"]
+        escape_start_epoch = parking_final_state["epoch"]
+        escape_end_epoch = _epoch_with_offset(escape_start_epoch, self.escape_duration_seconds)
         heliocentric_state = self._heliocentric_boundary_state(
-            epoch=escape_epoch,
+            epoch=escape_end_epoch,
             state_vector=transfer_plan.initial_state,
         )
 
         return EarthEscapePlan(
             segment_type="earthEscape",
-            start_epoch=escape_epoch,
-            end_epoch=escape_epoch,
+            start_epoch=escape_start_epoch,
+            end_epoch=escape_end_epoch,
             samples=[
                 {
                     "epochSeconds": 0.0,
@@ -53,7 +55,7 @@ class EarthEscapePlanner:
                     "referenceBodyId": parking_final_state["referenceBodyId"],
                 },
                 {
-                    "epochSeconds": 0.0,
+                    "epochSeconds": self.escape_duration_seconds,
                     "positionKm": list(heliocentric_state["positionKm"]),
                     "velocityKmPerSec": list(heliocentric_state["velocityKmPerSec"]),
                     "referenceFrame": heliocentric_state["referenceFrame"],
@@ -65,7 +67,7 @@ class EarthEscapePlanner:
                 {
                     "id": "segment-earth-escape-burn",
                     "type": "earthEscapeBurn",
-                    "epoch": escape_epoch,
+                    "epoch": escape_start_epoch,
                     "title": "Earth Escape Burn",
                     "description": "Inject from parking orbit toward an interplanetary departure trajectory.",
                     "relatedBody": "earth",
@@ -73,7 +75,7 @@ class EarthEscapePlanner:
                 {
                     "id": "segment-earth-soi-exit",
                     "type": "earthSoiExit",
-                    "epoch": escape_epoch,
+                    "epoch": escape_end_epoch,
                     "title": "Earth SOI Exit",
                     "description": "Transition from Earth departure into heliocentric cruise.",
                     "relatedBody": "earth",
@@ -94,3 +96,9 @@ class EarthEscapePlanner:
             "positionKm": tuple(float(component) for component in state_vector[:3]),
             "velocityKmPerSec": tuple(float(component) for component in state_vector[3:6]),
         }
+
+
+def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:
+    start = datetime.fromisoformat(base_epoch.replace("Z", "+00:00")).astimezone(timezone.utc)
+    shifted = start + timedelta(seconds=offset_seconds)
+    return shifted.isoformat(timespec="milliseconds").replace("+00:00", "Z")
