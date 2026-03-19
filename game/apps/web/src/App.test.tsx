@@ -466,3 +466,93 @@ it("plans a multi-planet tour and renders ranked tour candidates", async () => {
 
   expect(await screen.findByText("1,040 天")).toBeInTheDocument();
 });
+
+it("shows speed telemetry in the scene and switches components", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          samples: [
+            {
+              epochSeconds: 0,
+              positionKm: [149597870.7, 0, 0],
+              velocityKmPerSec: [0, 29.78, 0]
+            },
+            {
+              epochSeconds: 21600,
+              positionKm: [149500000, 643248, 0],
+              velocityKmPerSec: [-0.1, 29.88, 0.2]
+            }
+          ],
+          closestApproach: {
+            bodyId: "mars",
+            distanceKm: 8450000,
+            epochSeconds: 21600
+          },
+          ephemerisSource: "bundled-keplerian",
+          flightTimeSeconds: 259200,
+          warnings: []
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T00:00:00.000Z",
+          ephemerisSource: "bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [-24856124, 144936962, 0],
+              velocityKmPerSec: [-29.837, -5.127, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "bundled-ephemeris"
+            },
+            {
+              bodyId: "mars",
+              epoch: "2026-01-01T00:00:00.000Z",
+              positionKm: [-159185432, 188245763, 7650983],
+              velocityKmPerSec: [-17.235, -13.254, 0.156],
+              muKm3PerS2: 42828.375816,
+              sourceName: "bundled-ephemeris"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        },
+      ),
+    );
+
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(await screen.findByText("速度遥测")).toBeInTheDocument();
+  expect(await screen.findByText("当前速度")).toBeInTheDocument();
+  expect(await screen.findByText("29.78 km/s")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "vx" }));
+
+  expect(await screen.findByText("当前速度分量")).toBeInTheDocument();
+  expect(await screen.findByText("0.00 km/s")).toBeInTheDocument();
+});

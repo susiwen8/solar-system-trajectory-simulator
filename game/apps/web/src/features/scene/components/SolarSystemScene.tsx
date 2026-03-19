@@ -4,6 +4,12 @@ import * as THREE from "three";
 import { planetLabel, t, type Language } from "../../../lib/i18n";
 import type { BodyState, TrajectoryResult } from "../../mission/types";
 import { scaleDistanceKm } from "../lib/scale";
+import {
+  buildSpeedTelemetry,
+  formatDeltaSpeed,
+  formatSpeedValue,
+  type SpeedTelemetryMode,
+} from "../lib/speed-telemetry";
 import { computeBirdsEyeFrame, type BirdsEyeFrame } from "../lib/view";
 
 type SolarSystemSceneProps = {
@@ -78,7 +84,15 @@ export default function SolarSystemScene({
   const [renderMode, setRenderMode] = useState<"webgl" | "fallback">("fallback");
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
   const [hoveredBodyId, setHoveredBodyId] = useState<string | null>(null);
+  const [telemetryMode, setTelemetryMode] = useState<SpeedTelemetryMode>("speed");
   const copy = t(language);
+  const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, telemetryMode);
+  const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
+    { key: "speed", label: copy.speedModeMagnitude },
+    { key: "vx", label: copy.speedModeVx },
+    { key: "vy", label: copy.speedModeVy },
+    { key: "vz", label: copy.speedModeVz },
+  ];
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -146,6 +160,49 @@ export default function SolarSystemScene({
         }}
       >
         <canvas ref={canvasRef} aria-label={copy.threeCanvas} className="scene-canvas" />
+
+        <div className="scene-telemetry" aria-label={copy.speedTelemetry}>
+          <div className="scene-telemetry__header">
+            <div>
+              <span className="scene-telemetry__label">{copy.speedTelemetry}</span>
+              <strong>
+                {telemetryModeOptions.find((option) => option.key === telemetryMode)?.label ?? copy.speedModeMagnitude}
+              </strong>
+            </div>
+            <div className="scene-telemetry__tabs" aria-label={copy.speedTelemetry}>
+              {telemetryModeOptions.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className="scene-telemetry__tab"
+                  data-active={telemetryMode === option.key ? "true" : "false"}
+                  onClick={() => setTelemetryMode(option.key)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="scene-telemetry__metrics">
+            <div className="scene-telemetry__metric">
+              <span className="scene-telemetry__label">
+                {telemetryMode === "speed" ? copy.currentSpeed : copy.currentSpeedComponent}
+              </span>
+              <strong>{formatSpeedValue(telemetry.currentValue)}</strong>
+            </div>
+            <div className="scene-telemetry__metric">
+              <span className="scene-telemetry__label">{copy.speedDelta}</span>
+              <strong>{formatDeltaSpeed(telemetry.deltaValue)}</strong>
+            </div>
+          </div>
+
+          <SpeedTelemetryChart
+            points={telemetry.points}
+            selectedSampleIndex={selectedSampleIndex}
+            ariaLabel={copy.speedTelemetry}
+          />
+        </div>
       </div>
 
       <div className="scene-body-list scene-body-list--inline" aria-label={copy.visibleBodies}>
@@ -236,6 +293,56 @@ export default function SolarSystemScene({
         </div>
       </div>
     </section>
+  );
+}
+
+type SpeedTelemetryChartProps = {
+  points: number[];
+  selectedSampleIndex: number;
+  ariaLabel: string;
+};
+
+function SpeedTelemetryChart({ points, selectedSampleIndex, ariaLabel }: SpeedTelemetryChartProps) {
+  if (points.length === 0) {
+    return null;
+  }
+
+  const width = 240;
+  const height = 92;
+  const padding = 10;
+  const safeIndex = Math.min(Math.max(selectedSampleIndex, 0), points.length - 1);
+  const minValue = Math.min(...points);
+  const maxValue = Math.max(...points);
+  const span = Math.max(maxValue - minValue, 1);
+  const stepX = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+
+  const coordinates = points.map((value, index) => {
+    const x = padding + index * stepX;
+    const normalized = (value - minValue) / span;
+    const y = height - padding - normalized * (height - padding * 2);
+    return { x, y };
+  });
+
+  const polyline = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  const activePoint = coordinates[safeIndex];
+
+  return (
+    <svg
+      className="scene-telemetry__chart"
+      viewBox={`0 0 ${width} ${height}`}
+      aria-label={ariaLabel}
+      role="img"
+    >
+      <polyline
+        points={polyline}
+        fill="none"
+        stroke="rgba(147, 231, 255, 0.95)"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={activePoint.x} cy={activePoint.y} r="4.5" fill="#f7bf66" />
+    </svg>
   );
 }
 
