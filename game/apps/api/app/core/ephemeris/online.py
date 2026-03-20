@@ -13,20 +13,23 @@ class OnlineCachedEphemeris:
     def __init__(self, *, cache_root: Path, client: Any) -> None:
         self.cache_store = EphemerisCacheStore(cache_root)
         self.client = client
+        self._online_available = True
 
     @property
     def source_name(self) -> str:
         return "jpl-horizons-online-cache"
 
     def get_body_state(self, body_id: str, epoch: str) -> BodyState:
-        if body_id not in BODY_COMMAND_IDS:
-            raise KeyError(body_id)
-
         path = self.cache_store.body_path(body_id)
         try:
             return self._read_cached_state(path, body_id, epoch)
         except KeyError:
             pass
+
+        if not self._online_available:
+            raise KeyError(body_id)
+        if body_id not in BODY_COMMAND_IDS:
+            raise KeyError(body_id)
 
         try:
             samples = self.client.fetch_vectors(
@@ -36,6 +39,7 @@ class OnlineCachedEphemeris:
                 step_size="12h",
             )
         except Exception as error:
+            self._online_available = False
             raise KeyError(f"Unable to resolve {body_id} at {epoch} from online cache") from error
 
         self.cache_store.write_body_samples(
