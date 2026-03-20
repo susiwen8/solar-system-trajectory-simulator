@@ -10,9 +10,10 @@ describe("computeFocusBodyVisualProfile", () => {
     const profile = computeFocusBodyVisualProfile("mars", "cruise-follow");
 
     expect(profile.haloScale).toBeGreaterThan(1);
-    expect(profile.haloScale).toBeLessThan(1.2);
+    expect(profile.haloScale).toBeLessThan(1.08);
+    expect(profile.haloOpacity).toBeLessThan(0.08);
     expect(profile.bandCount).toBe(0);
-    expect(profile.atmosphereOpacity).toBeLessThan(0.2);
+    expect(profile.atmosphereOpacity).toBeLessThan(0.08);
   });
 
   it("adds atmospheric emphasis for rocky-planet approaches", () => {
