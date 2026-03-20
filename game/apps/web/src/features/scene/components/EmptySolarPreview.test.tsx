@@ -31,6 +31,12 @@ describe("EmptySolarPreview", () => {
     expect(screen.getByLabelText("Three.js 飞行画布")).toBeInTheDocument();
   });
 
+  it("marks the refined preview surface for the enhanced orbit view", () => {
+    render(<EmptySolarPreview bodies={bodies} language="zh" />);
+
+    expect(screen.getByTestId("empty-orbit-preview")).toHaveAttribute("data-orbit-guide-style", "refined");
+  });
+
   it("renders a minimal fallback surface when body data is missing", () => {
     render(<EmptySolarPreview bodies={[]} language="zh" />);
 

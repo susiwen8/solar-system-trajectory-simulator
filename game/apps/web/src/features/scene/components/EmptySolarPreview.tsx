@@ -5,12 +5,15 @@ import { t, type Language } from "../../../lib/i18n";
 import type { BodyState } from "../../mission/types";
 import { BODY_PHYSICAL_RADII_KM, sceneBodyRadiusFromPhysicalKm } from "../lib/body-physics";
 import {
-  applyEmptyPreviewDrag,
-  applyEmptyPreviewZoom,
-  advanceEmptyPreviewYaw,
-  createDefaultEmptyPreviewCameraState,
+  applyEmptyPreviewRigDrag,
+  applyEmptyPreviewRigZoom,
+  advanceEmptyPreviewAmbientTarget,
+  createDefaultEmptyPreviewCameraRig,
   type EmptyPreviewCameraState,
+  type EmptyPreviewCameraRig,
+  stepEmptyPreviewCameraRig,
 } from "../lib/empty-preview-motion";
+import { buildEmptyPreviewOrbitGuide } from "../lib/empty-preview-orbits";
 import { scaleOverviewDistanceKm } from "../lib/scale";
 
 type EmptySolarPreviewProps = {
@@ -51,7 +54,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<PreviewRuntime | null>(null);
-  const cameraStateRef = useRef<EmptyPreviewCameraState>(createDefaultEmptyPreviewCameraState());
+  const cameraRigRef = useRef<EmptyPreviewCameraRig>(createDefaultEmptyPreviewCameraRig());
   const pointerGestureRef = useRef<PointerGesture | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
   const copy = t(language);
@@ -79,8 +82,9 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
       const previousTime = lastFrameTimeRef.current ?? time;
       const deltaSeconds = Math.min((time - previousTime) / 1000, 0.05);
       lastFrameTimeRef.current = time;
-      cameraStateRef.current = advanceEmptyPreviewYaw(cameraStateRef.current, deltaSeconds);
-      updatePreviewCamera(runtime.camera, cameraStateRef.current, bodies);
+      cameraRigRef.current = advanceEmptyPreviewAmbientTarget(cameraRigRef.current, deltaSeconds);
+      cameraRigRef.current = stepEmptyPreviewCameraRig(cameraRigRef.current, deltaSeconds);
+      updatePreviewCamera(runtime.camera, cameraRigRef.current.rendered, bodies);
       runtime.renderer.render(runtime.scene, runtime.camera);
       runtime.frameHandle = window.requestAnimationFrame(animate);
     };
@@ -94,7 +98,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
       runtime.renderer.dispose();
       runtimeRef.current = null;
     };
-  }, [bodies]);
+  }, []);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -103,7 +107,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
     }
 
     syncPreviewBodies(runtime, bodies);
-    updatePreviewCamera(runtime.camera, cameraStateRef.current, bodies);
+    updatePreviewCamera(runtime.camera, cameraRigRef.current.rendered, bodies);
     runtime.renderer.render(runtime.scene, runtime.camera);
   }, [bodies]);
 
@@ -137,7 +141,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
       lastX: event.clientX,
       lastY: event.clientY,
     };
-    cameraStateRef.current = applyEmptyPreviewDrag(cameraStateRef.current, { deltaX, deltaY });
+    cameraRigRef.current = applyEmptyPreviewRigDrag(cameraRigRef.current, { deltaX, deltaY });
   }
 
   function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
@@ -150,7 +154,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
 
   function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
     event.preventDefault();
-    cameraStateRef.current = applyEmptyPreviewZoom(cameraStateRef.current, event.deltaY);
+    cameraRigRef.current = applyEmptyPreviewRigZoom(cameraRigRef.current, event.deltaY);
   }
 
   return (
@@ -158,6 +162,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
       ref={surfaceRef}
       className="scene-shell__surface scene-shell__surface--empty-preview"
       data-testid="empty-orbit-preview"
+      data-orbit-guide-style="refined"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -178,12 +183,18 @@ function createPreviewRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(surface.clientWidth || 1, surface.clientHeight || 1, false);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(44, resolveAspect(surface), 0.1, 400);
 
-    scene.fog = new THREE.FogExp2("#07111e", 0.006);
-    scene.add(new THREE.AmbientLight("#a8c4ff", 1.2));
+    scene.fog = new THREE.FogExp2("#07111e", 0.0042);
+    scene.add(new THREE.AmbientLight("#9eb7de", 1.05));
+
+    const fillLight = new THREE.DirectionalLight("#7aa8ff", 0.68);
+    fillLight.position.set(24, 18, 14);
+    scene.add(fillLight);
 
     const sunLight = new THREE.PointLight("#ffd27a", 2.7, 0, 2);
     sunLight.position.set(0, 0, 0);
@@ -233,16 +244,19 @@ function syncPreviewBodies(runtime: PreviewRuntime, bodies: BodyState[]) {
   const visibleBodies = bodies.length ? bodies : buildFallbackBodies();
   for (const body of visibleBodies) {
     const position = bodyToScenePosition(body);
+    const visualProfile = resolveBodyVisualProfile(body.bodyId);
     const radius = sceneBodyRadiusFromPhysicalKm(
       BODY_PHYSICAL_RADII_KM[body.bodyId as keyof typeof BODY_PHYSICAL_RADII_KM] ?? 3000,
-    );
+    ) * visualProfile.radiusMultiplier;
 
     const material = new THREE.MeshStandardMaterial({
       color: bodyColors[body.bodyId] ?? "#eef4fb",
-      emissive: body.bodyId === "sun" ? "#f4b400" : "#000000",
-      emissiveIntensity: body.bodyId === "sun" ? 0.9 : 0,
-      roughness: body.bodyId === "sun" ? 0.45 : 0.72,
-      metalness: 0.08,
+      emissive: visualProfile.emissive,
+      emissiveIntensity: visualProfile.emissiveIntensity,
+      roughness: visualProfile.roughness,
+      metalness: visualProfile.metalness,
+      transparent: visualProfile.opacity < 1,
+      opacity: visualProfile.opacity,
     });
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(radius, 28, 20),
@@ -251,9 +265,12 @@ function syncPreviewBodies(runtime: PreviewRuntime, bodies: BodyState[]) {
     mesh.position.copy(position);
     runtime.bodyGroup.add(mesh);
 
-    if (body.bodyId !== "sun") {
-      runtime.orbitGroup.add(createOrbitGuide(position));
+    if (body.bodyId === "sun") {
+      runtime.bodyGroup.add(createSunGlow(radius));
+      continue;
     }
+
+    runtime.orbitGroup.add(createOrbitGuide(body.bodyId, position));
   }
 }
 
@@ -281,17 +298,33 @@ function updatePreviewCamera(
   camera.lookAt(0, 0, 0);
 }
 
-function createOrbitGuide(position: THREE.Vector3) {
-  const radius = Math.max(Math.hypot(position.x, position.z), 2.4);
-  const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
-  const points = curve.getPoints(96).map((point) => new THREE.Vector3(point.x, 0, point.y));
+function createOrbitGuide(bodyId: string, position: THREE.Vector3) {
+  const guide = buildEmptyPreviewOrbitGuide(bodyId, Math.max(Math.hypot(position.x, position.z), 2.4));
+  const curve = new THREE.EllipseCurve(0, 0, guide.radiusX, guide.radiusY, 0, Math.PI * 2, false, 0);
+  const points = curve
+    .getPoints(Math.round(84 * guide.lineWidthScale))
+    .map((point) => new THREE.Vector3(point.x, 0, point.y));
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
   const material = new THREE.LineBasicMaterial({
-    color: "#88a9cc",
-    opacity: 0.24,
+    color: INNER_BODY_IDS.has(bodyId) ? "#9ec7ff" : "#6d88a8",
+    opacity: guide.opacity,
     transparent: true,
   });
-  return new THREE.LineLoop(geometry, material);
+  const orbit = new THREE.LineLoop(geometry, material);
+  orbit.rotation.y = Math.atan2(position.z, position.x) * guide.eccentricity;
+  return orbit;
+}
+
+function createSunGlow(radius: number) {
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 1.75, 24, 18),
+    new THREE.MeshBasicMaterial({
+      color: "#ffcc72",
+      transparent: true,
+      opacity: 0.18,
+    }),
+  );
+  return glow;
 }
 
 function bodyToScenePosition(body: BodyState) {
@@ -313,6 +346,53 @@ function buildFallbackBodies(): BodyState[] {
       sourceName: "fallback",
     },
   ];
+}
+
+const INNER_BODY_IDS = new Set(["mercury", "venus", "earth", "mars"]);
+const OUTER_BODY_IDS = new Set(["jupiter", "saturn", "uranus", "neptune"]);
+
+function resolveBodyVisualProfile(bodyId: string) {
+  if (bodyId === "sun") {
+    return {
+      radiusMultiplier: 1.14,
+      emissive: "#f4b400",
+      emissiveIntensity: 1.45,
+      roughness: 0.34,
+      metalness: 0.02,
+      opacity: 1,
+    };
+  }
+
+  if (INNER_BODY_IDS.has(bodyId)) {
+    return {
+      radiusMultiplier: 1,
+      emissive: "#0f141c",
+      emissiveIntensity: 0.06,
+      roughness: 0.6,
+      metalness: 0.08,
+      opacity: 0.98,
+    };
+  }
+
+  if (OUTER_BODY_IDS.has(bodyId)) {
+    return {
+      radiusMultiplier: 1.07,
+      emissive: "#0b1016",
+      emissiveIntensity: 0.04,
+      roughness: 0.76,
+      metalness: 0.04,
+      opacity: 0.9,
+    };
+  }
+
+  return {
+    radiusMultiplier: 1,
+    emissive: "#000000",
+    emissiveIntensity: 0,
+    roughness: 0.7,
+    metalness: 0.05,
+    opacity: 1,
+  };
 }
 
 function resolveAspect(surface: HTMLDivElement) {
