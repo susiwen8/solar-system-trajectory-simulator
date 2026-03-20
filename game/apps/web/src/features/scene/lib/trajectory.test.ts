@@ -4,16 +4,16 @@ import type { TrajectorySample } from "../../mission/types";
 import { interpolateTrajectorySample, toScenePoints } from "./trajectory";
 
 describe("trajectory helpers", () => {
-  it("projects trajectory samples into scene points", () => {
+  it("projects near-field trajectory samples into compressed scene points", () => {
     const points = toScenePoints([
       {
         epochSeconds: 0,
-        positionKm: [2_500_000, 5_000_000, 7_500_000],
+        positionKm: [250_000, 500_000, 750_000],
         velocityKmPerSec: [0, 0, 0],
       },
     ]);
 
-    expect(points).toEqual([{ x: 1, y: 2, z: 3 }]);
+    expect(points).toEqual([{ x: 0.1, y: 0.2, z: 0.3 }]);
   });
 
   it("interpolates between neighboring trajectory samples", () => {
