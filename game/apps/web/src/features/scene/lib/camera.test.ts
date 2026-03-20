@@ -47,6 +47,7 @@ describe("computeProbeCameraView", () => {
     expect(view.mode).toBe("cruise-follow");
     expect(view.focusBodyId).toBe("mars");
     expect(view.fovDeg).toBeGreaterThan(45);
+    expect(Math.abs(view.cameraOffsetKm[0])).toBeLessThan(24_000);
     expect(view.cameraOffsetKm[1]).toBeGreaterThan(0);
     expect(view.focusBodyScale).toBe(1);
   });
@@ -110,6 +111,7 @@ describe("computeProbeCameraView", () => {
     expect(view.focusBodyId).toBe("jupiter");
     expect(view.fovDeg).toBeLessThan(45);
     expect(view.cameraOffsetKm[2]).toBeGreaterThan(0);
+    expect(view.cameraOffsetKm[2]).toBeLessThan(5_000);
     expect(view.focusBodyScale).toBeGreaterThan(2);
   });
 });

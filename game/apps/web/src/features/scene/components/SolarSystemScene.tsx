@@ -38,7 +38,11 @@ import {
   PROBE_MODEL_ALIGNMENT_YAW_RAD,
   PROBE_VISUAL_SCALE,
 } from "../lib/probe-model";
-import { scaleDistanceKm } from "../lib/scale";
+import {
+  BODY_PHYSICAL_RADII_KM,
+  sceneBodyRadiusFromPhysicalKm,
+} from "../lib/body-physics";
+import { compressSceneDistanceKm } from "../lib/scale";
 import {
   buildSpeedTelemetry,
   formatSpeedValue,
@@ -110,18 +114,6 @@ const bodyColors: Record<string, string> = {
   neptune: "#6f93ff"
 };
 
-const bodyRadii: Record<string, number> = {
-  sun: 10,
-  mercury: 2.6,
-  venus: 3.4,
-  earth: 3.6,
-  mars: 3.1,
-  jupiter: 6.4,
-  saturn: 5.8,
-  uranus: 4.8,
-  neptune: 4.7
-};
-
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 2.4;
 const DEFAULT_ZOOM = 1.15;
@@ -172,7 +164,7 @@ export default function SolarSystemScene({
   const displayedCapturePathPoints = arrivalCaptureModel
     ? buildDisplayCapturePathPoints(
         arrivalCaptureModel.pathPoints,
-        bodyRadii[arrivalCaptureModel.bodyId] ?? 1.8,
+        bodySceneRadius(arrivalCaptureModel.bodyId),
       )
     : null;
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
@@ -1045,7 +1037,7 @@ function createAnchorMesh(
   halo.rotation.x = -Math.PI / 2;
   group.add(halo);
 
-  const coreGeometry = new THREE.SphereGeometry((bodyRadii[bodyId] ?? 1.8) * 0.78, 20, 20);
+  const coreGeometry = new THREE.SphereGeometry(bodySceneRadius(bodyId) * 0.78, 20, 20);
   const coreMaterial = new THREE.MeshStandardMaterial({
     color: bodyColors[bodyId] ?? "#f5f3ed",
     emissive: bodyColors[bodyId] ?? "#f5f3ed",
@@ -1072,7 +1064,7 @@ function createAnchorMesh(
 }
 
 function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
-  const radius = bodyRadii[body.bodyId] ?? 1.8;
+  const radius = bodySceneRadius(body.bodyId);
   const group = new THREE.Group();
   const focusVisual = isFocusBody ? computeFocusBodyVisualProfile(body.bodyId, focusScale >= 2 ? "flyby-emphasis" : focusScale > 1 ? "approach-emphasis" : "cruise-follow") : null;
   const ringProfile = getPlanetaryRingProfile(body.bodyId);
@@ -1119,7 +1111,7 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: bo
     }
   }
   if (isHighlighted || isFocusBody) {
-    group.scale.setScalar(isFocusBody ? focusScale : 1.2);
+    group.scale.setScalar(isFocusBody ? Math.min(focusScale, 1.04) : 1.06);
   }
   return group;
 }
@@ -1284,10 +1276,17 @@ function createManeuverMarker(
 
 function toThreeVector(positionKm: [number, number, number]) {
   return new THREE.Vector3(
-    scaleDistanceKm(positionKm[0]) * 1.8,
-    scaleDistanceKm(positionKm[2]) * 0.8,
-    scaleDistanceKm(positionKm[1]) * 1.8
+    compressSceneDistanceKm(positionKm[0]) * 1.8,
+    compressSceneDistanceKm(positionKm[2]) * 0.8,
+    compressSceneDistanceKm(positionKm[1]) * 1.8
   );
+}
+
+function bodySceneRadius(bodyId: string) {
+  const physicalRadiusKm =
+    BODY_PHYSICAL_RADII_KM[bodyId as keyof typeof BODY_PHYSICAL_RADII_KM] ??
+    BODY_PHYSICAL_RADII_KM.earth;
+  return sceneBodyRadiusFromPhysicalKm(physicalRadiusKm);
 }
 
 function toThreeDirection(direction: [number, number, number]) {

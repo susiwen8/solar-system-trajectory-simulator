@@ -1,6 +1,6 @@
 import type { ProbeCameraView } from "./camera";
 import type { OrbitCameraState } from "./orbit-camera";
-import { scaleDistanceKm } from "./scale";
+import { compressSceneDistanceKm } from "./scale";
 
 export type ProbeCameraFrame = {
   position: [number, number, number];
@@ -76,38 +76,38 @@ export function buildProbeCameraFrame(
 function cinematicOffsets(mode: ProbeCameraView["mode"]) {
   if (mode === "flyby-emphasis") {
     return {
-      behind: 8,
-      height: 2.6,
-      lateral: 4.4,
-      lookAhead: 6.5,
-      lookLift: 0.5,
+      behind: 5.2,
+      height: 1.7,
+      lateral: 3.1,
+      lookAhead: 5,
+      lookLift: 0.35,
     };
   }
 
   if (mode === "approach-emphasis") {
     return {
-      behind: 10.5,
-      height: 3.8,
+      behind: 6.8,
+      height: 2.2,
       lateral: 0,
-      lookAhead: 8.5,
-      lookLift: 0.7,
+      lookAhead: 6.1,
+      lookLift: 0.45,
     };
   }
 
   return {
-    behind: 15,
-    height: 5.8,
+    behind: 8.2,
+    height: 2.6,
     lateral: 0,
-    lookAhead: 12,
-    lookLift: 1,
+    lookAhead: 7.2,
+    lookLift: 0.45,
   };
 }
 
 function toSceneVector(positionKm: [number, number, number]): [number, number, number] {
   return [
-    scaleDistanceKm(positionKm[0]) * 1.8,
-    scaleDistanceKm(positionKm[2]) * 0.8,
-    scaleDistanceKm(positionKm[1]) * 1.8,
+    compressSceneDistanceKm(positionKm[0]) * 1.8,
+    compressSceneDistanceKm(positionKm[2]) * 0.8,
+    compressSceneDistanceKm(positionKm[1]) * 1.8,
   ];
 }
 

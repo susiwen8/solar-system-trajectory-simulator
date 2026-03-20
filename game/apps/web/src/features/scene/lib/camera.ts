@@ -26,9 +26,9 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
       mode: proximity.mode,
       focusBodyId: proximity.focusBodyId,
       lookDirection,
-      cameraOffsetKm: [-12_000, 4_000, 7_500],
-      fovDeg: 38,
-      focusBodyScale: 2.8,
+      cameraOffsetKm: [-7_000, 1_800, 3_600],
+      fovDeg: 40,
+      focusBodyScale: 2.1,
     };
   }
 
@@ -37,9 +37,9 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
       mode: proximity.mode,
       focusBodyId: proximity.focusBodyId,
       lookDirection,
-      cameraOffsetKm: [-18_000, 6_000, 0],
-      fovDeg: 48,
-      focusBodyScale: 1.8,
+      cameraOffsetKm: [-12_000, 3_000, 0],
+      fovDeg: 50,
+      focusBodyScale: 1.45,
     };
   }
 
@@ -47,7 +47,7 @@ export function computeProbeCameraView(input: ComputeProbeCameraViewInput): Prob
     mode: "cruise-follow",
     focusBodyId: proximity.focusBodyId,
     lookDirection,
-    cameraOffsetKm: [-32_000, 10_000, 0],
+    cameraOffsetKm: [-18_000, 4_500, 0],
     fovDeg: 58,
     focusBodyScale: 1,
   };
