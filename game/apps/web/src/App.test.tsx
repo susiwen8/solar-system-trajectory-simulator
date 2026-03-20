@@ -64,6 +64,13 @@ it("switches visible interface copy to English", async () => {
   expect(screen.getByRole("button", { name: "Propagate Trajectory" })).toBeInTheDocument();
 });
 
+it("shows the orbit preview in the empty scene instead of the old placeholder copy", async () => {
+  render(<App />);
+
+  expect(await screen.findByTestId("empty-orbit-preview")).toBeInTheDocument();
+  expect(screen.queryByText("运行任务后即可描绘轨迹")).not.toBeInTheDocument();
+});
+
 it("shows the mission metrics panel after propagation results load", async () => {
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")

@@ -10,6 +10,7 @@ import type {
   MissionRequest,
   TrajectoryResult,
 } from "./features/mission/types";
+import EmptySolarPreview from "./features/scene/components/EmptySolarPreview";
 import SolarSystemScene from "./features/scene/components/SolarSystemScene";
 import { fetchEphemerisBodies, fetchLaunchWindow, planMissionTour, propagateMission } from "./lib/api";
 import { planetLabel, t, type Language } from "./lib/i18n";
@@ -253,15 +254,7 @@ export default function App() {
           />
         ) : (
           <section className="scene-shell scene-shell--empty" aria-label={copy.trajectoryScene}>
-            <div className="scene-shell__backdrop" aria-hidden="true">
-              <span className="scene-orbit scene-orbit--one" />
-              <span className="scene-orbit scene-orbit--two" />
-              <span className="scene-orbit scene-orbit--three" />
-              <span className="scene-sun" />
-            </div>
-            <div className="scene-empty-copy">
-              <h3>{copy.paintTrajectory}</h3>
-            </div>
+            <EmptySolarPreview bodies={bodies} language={language} />
           </section>
         )}
       </section>

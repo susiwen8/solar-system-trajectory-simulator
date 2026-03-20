@@ -104,7 +104,6 @@ button {
 .mission-panel__header h1,
 .scene-stage__header h2,
 .scene-shell__hud-copy h3,
-.scene-empty-copy h3,
 .summary-card h2,
 .mission-form__group-header h3 {
   margin: 0;
@@ -160,7 +159,6 @@ button {
 .summary-card p,
 .mission-form__group-header p,
 .mission-form__hint,
-.scene-empty-copy p,
 .scene-shell__hud-copy p {
   margin: 0;
   color: rgba(225, 232, 240, 0.72);
@@ -538,7 +536,7 @@ button {
 }
 
 .scene-shell--empty {
-  place-items: center;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .scene-shell__hud {
@@ -607,6 +605,11 @@ button {
 
 .scene-shell__surface:active {
   cursor: grabbing;
+}
+
+.scene-shell__surface--empty-preview {
+  min-height: 100%;
+  border-color: rgba(148, 181, 214, 0.1);
 }
 
 .scene-canvas {
@@ -826,62 +829,6 @@ button {
 .scene-shell__footer-meta {
   display: flex;
   gap: 0.8rem;
-}
-
-.scene-shell__backdrop {
-  position: absolute;
-  inset: 0;
-}
-
-.scene-orbit,
-.scene-sun {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  border-radius: 999px;
-}
-
-.scene-sun {
-  width: 1.4rem;
-  height: 1.4rem;
-  margin-left: -0.7rem;
-  margin-top: -0.7rem;
-  background: radial-gradient(circle, #ffd27a, #ef9d52);
-  box-shadow: 0 0 40px rgba(255, 190, 74, 0.55);
-}
-
-.scene-orbit {
-  border: 1px solid rgba(148, 181, 214, 0.16);
-}
-
-.scene-orbit--one {
-  width: 12rem;
-  height: 12rem;
-  margin-left: -6rem;
-  margin-top: -6rem;
-}
-
-.scene-orbit--two {
-  width: 22rem;
-  height: 22rem;
-  margin-left: -11rem;
-  margin-top: -11rem;
-}
-
-.scene-orbit--three {
-  width: 34rem;
-  height: 34rem;
-  margin-left: -17rem;
-  margin-top: -17rem;
-}
-
-.scene-empty-copy {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: 0.6rem;
-  max-width: 26rem;
-  text-align: center;
 }
 
 @media (max-width: 1100px) {
