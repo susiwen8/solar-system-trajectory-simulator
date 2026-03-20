@@ -88,4 +88,4 @@ def test_tour_planner_adds_flyby_segments_to_candidates() -> None:
     assert candidates
     candidate_with_flyby = next(candidate for candidate in candidates if candidate.flyby_events)
     assert candidate_with_flyby.segments is not None
-    assert any(segment["segmentType"] == "gravityAssistFlyby" for segment in candidate_with_flyby.segments)
+    assert any(segment["segmentType"] == "flybyEncounter" for segment in candidate_with_flyby.segments)

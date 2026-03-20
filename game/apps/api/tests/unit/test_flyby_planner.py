@@ -14,9 +14,15 @@ def test_flyby_planner_builds_geometry_rich_segment() -> None:
         position_km=(778_500_000.0, 0.0, 0.0),
     )
 
-    assert segment.segment_type == "gravityAssistFlyby"
+    assert segment.segment_type == "flybyEncounter"
+    assert segment.samples
+    assert segment.initial_state["referenceFrame"] == "jupiter-centered-inertial"
     assert segment.metadata["bodyId"] == "jupiter"
     assert segment.metadata["turnAngleDeg"] == 28.0
     assert segment.metadata["periapsisAltitudeKm"] == 75_000.0
+    assert segment.metadata["incomingVInfinityKmPerS"] > 0
+    assert segment.metadata["outgoingVInfinityKmPerS"] > 0
     assert "bPlaneLike" in segment.metadata
-    assert segment.events[1]["type"] == "flybyPeriapsis"
+    assert segment.events[0]["type"] == "sphereOfInfluenceEntry"
+    assert segment.events[1]["type"] == "hyperbolicPeriapsis"
+    assert segment.events[-1]["type"] == "sphereOfInfluenceExit"

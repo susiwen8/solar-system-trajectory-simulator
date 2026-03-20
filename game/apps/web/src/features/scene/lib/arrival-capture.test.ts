@@ -59,7 +59,7 @@ function buildResult(segments: MissionSegment[]): TrajectoryResult {
 describe("buildArrivalCaptureModel", () => {
   it("prefers real target-centered capture samples over a synthetic orbit summary", () => {
     const sampledOrbit: MissionSegment = buildSegment({
-      segmentType: "arrivalCapture",
+      segmentType: "parkingOrbit",
       samples: [
         {
           epochSeconds: 0,
@@ -144,7 +144,7 @@ describe("buildArrivalCaptureModel", () => {
     const model = buildArrivalCaptureModel(
       buildResult([
         buildSegment({
-          segmentType: "gravityAssistFlyby",
+          segmentType: "flybyEncounter",
           metadata: {
             bodyId: "mars",
             turnAngleDeg: 18,

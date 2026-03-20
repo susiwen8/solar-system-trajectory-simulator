@@ -111,7 +111,7 @@ const result = {
       },
     },
     {
-      segmentType: "gravityAssistFlyby",
+      segmentType: "flybyEncounter",
       startEpoch: "2026-07-01T00:00:00.000Z",
       endEpoch: "2026-07-02T00:00:00.000Z",
       samples: [],

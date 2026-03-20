@@ -68,9 +68,9 @@ describe("computeProbeCameraView", () => {
     expect(view.focusBodyScale).toBeGreaterThan(1);
   });
 
-  it("switches to flyby framing for gravity-assist segments", () => {
+  it("switches to flyby framing for encounter flyby segments", () => {
     const activeSegment: MissionSegment = {
-      segmentType: "gravityAssistFlyby",
+      segmentType: "flybyEncounter",
       startEpoch: "2026-07-01T00:00:00.000Z",
       endEpoch: "2026-07-02T00:00:00.000Z",
       samples: [],

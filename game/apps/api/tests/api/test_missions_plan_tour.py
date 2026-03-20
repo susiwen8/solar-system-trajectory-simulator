@@ -27,7 +27,7 @@ def test_plan_tour_returns_ranked_candidates() -> None:
     assert "segments" in data
     assert "segments" in data["candidates"][0]
     assert any(
-        any(segment["segmentType"] == "gravityAssistFlyby" for segment in candidate["segments"])
+        any(segment["segmentType"] == "flybyEncounter" for segment in candidate["segments"])
         for candidate in data["candidates"]
         if candidate["flybyEvents"]
     )

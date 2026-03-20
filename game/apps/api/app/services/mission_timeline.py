@@ -214,6 +214,40 @@ def build_mission_timeline(
             )
         )
 
+    if {
+        "sphereOfInfluenceEntry",
+        "hyperbolicPeriapsis",
+        "sphereOfInfluenceExit",
+    }.issubset(segment_event_map.keys()):
+        soi_entry_event = segment_event_map["sphereOfInfluenceEntry"]
+        periapsis_event = segment_event_map["hyperbolicPeriapsis"]
+        soi_exit_event = segment_event_map["sphereOfInfluenceExit"]
+        body_id = str(
+            soi_entry_event.get("relatedBody")
+            or periapsis_event.get("relatedBody")
+            or soi_exit_event.get("relatedBody")
+            or target_body
+        )
+        soi_entry = _parse_epoch(str(soi_entry_event["epoch"]))
+        soi_exit = _parse_epoch(str(soi_exit_event["epoch"]))
+        if soi_exit > soi_entry:
+            blocks.append(
+                _PhaseBlock(
+                    type="flybyEncounter",
+                    start=soi_entry,
+                    end=soi_exit,
+                    title=f"{body_id.title()} Flyby Encounter",
+                    description=f"Traverse the primary encounter corridor around {body_id.title()}.",
+                    related_body=body_id,
+                    event_ids=(
+                        segment_event_ids["sphereOfInfluenceEntry"],
+                        segment_event_ids["hyperbolicPeriapsis"],
+                        segment_event_ids["sphereOfInfluenceExit"],
+                    ),
+                    priority=88,
+                )
+            )
+
     encounters = list(visit_events or [])
     if not encounters and closest_approach is not None:
         encounters = [

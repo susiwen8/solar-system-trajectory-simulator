@@ -11,6 +11,7 @@ export type ArrivalCaptureModel = {
 };
 
 const CAPTURE_SEGMENT_TYPES = new Set(["parkingOrbit", "arrivalCapture", "scienceOrbit"]);
+const NON_CAPTURE_SEGMENT_TYPES = new Set(["gravityAssistFlyby", "flybyEncounter"]);
 const ORBIT_POINT_COUNT = 72;
 const MIN_CAPTURE_CLEARANCE_MULTIPLIER = 1.28;
 
@@ -52,7 +53,7 @@ export function buildArrivalCaptureModel(result: TrajectoryResult): ArrivalCaptu
 
 export function findArrivalCaptureSegment(segments: MissionSegment[], fallbackBodyId?: string): MissionSegment | null {
   for (const segment of [...segments].reverse()) {
-    if (segment.segmentType === "gravityAssistFlyby") {
+    if (NON_CAPTURE_SEGMENT_TYPES.has(segment.segmentType)) {
       continue;
     }
 

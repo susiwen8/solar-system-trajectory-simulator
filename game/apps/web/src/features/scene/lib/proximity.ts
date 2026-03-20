@@ -16,6 +16,7 @@ export type ProbeProximityState = {
 };
 
 const APPROACH_DISTANCE_KM = 10_000_000;
+const FLYBY_SEGMENT_TYPES = new Set(["gravityAssistFlyby", "flybyEncounter"]);
 
 export function resolveProbeProximityState({
   sample,
@@ -24,7 +25,9 @@ export function resolveProbeProximityState({
   activeSegment,
 }: ProbeSceneContext): ProbeProximityState {
   const flybyBodyId =
-    activeSegment?.segmentType === "gravityAssistFlyby" ? activeSegment.metadata?.bodyId ?? activeSegment.initialState.referenceBodyId ?? null : null;
+    activeSegment && FLYBY_SEGMENT_TYPES.has(activeSegment.segmentType)
+      ? activeSegment.metadata?.bodyId ?? activeSegment.initialState.referenceBodyId ?? null
+      : null;
 
   if (flybyBodyId) {
     return {

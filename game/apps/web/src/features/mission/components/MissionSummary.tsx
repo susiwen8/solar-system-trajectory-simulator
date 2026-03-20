@@ -85,7 +85,7 @@ function formatSegmentDetails(result: TrajectoryResult, language: Language): Arr
       }
     }
 
-    if (segment.segmentType === "gravityAssistFlyby") {
+    if (segment.segmentType === "gravityAssistFlyby" || segment.segmentType === "flybyEncounter") {
       if (segment.metadata?.turnAngleDeg != null) {
         details.push({
           key: `${segment.segmentType}-turn-angle`,
