@@ -49,6 +49,53 @@ function closestApproach(bodyId: string): ClosestApproach {
 }
 
 describe("buildInsetMapModel", () => {
+  it("builds sun-centered orbital guide paths for relevant planets", () => {
+    const model = buildInsetMapModel({
+      samples,
+      bodies,
+      closestApproach: closestApproach("mars"),
+      selectedSampleIndex: 1,
+      flybyEvents: [],
+    });
+
+    const earthOrbit = model.orbitPaths.find((orbit) => orbit.bodyId === "earth");
+
+    expect(earthOrbit).toBeDefined();
+    expect(earthOrbit?.points.length).toBeGreaterThan(24);
+    expect(Math.min(...earthOrbit!.points.map((point) => point.x))).toBeLessThan(model.viewBox.width / 2);
+    expect(Math.max(...earthOrbit!.points.map((point) => point.x))).toBeGreaterThan(model.viewBox.width / 2);
+    expect(Math.min(...earthOrbit!.points.map((point) => point.y))).toBeLessThan(model.viewBox.height / 2);
+    expect(Math.max(...earthOrbit!.points.map((point) => point.y))).toBeGreaterThan(model.viewBox.height / 2);
+  });
+
+  it("keeps the inset map centered on the sun with equal radial scaling", () => {
+    const model = buildInsetMapModel({
+      samples,
+      bodies: [
+        {
+          ...bodies[0],
+          positionKm: [149_597_870.7, 0, 0],
+        },
+        {
+          ...bodies[1],
+          positionKm: [0, 149_597_870.7, 0],
+        },
+      ],
+      closestApproach: closestApproach("mars"),
+      selectedSampleIndex: 0,
+      flybyEvents: [],
+    });
+
+    const earthPoint = model.visibleBodies.find((body) => body.bodyId === "earth");
+    const marsPoint = model.visibleBodies.find((body) => body.bodyId === "mars");
+    const centerX = model.viewBox.width / 2;
+    const centerY = model.viewBox.height / 2;
+
+    expect(earthPoint).toBeDefined();
+    expect(marsPoint).toBeDefined();
+    expect(Math.abs((earthPoint?.x ?? 0) - centerX)).toBeCloseTo(Math.abs((marsPoint?.y ?? 0) - centerY), 5);
+  });
+
   it("projects trajectory samples into stable inset-map coordinates", () => {
     const model = buildInsetMapModel({
       samples,

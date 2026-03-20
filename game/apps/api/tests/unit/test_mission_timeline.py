@@ -113,10 +113,17 @@ def test_build_timeline_includes_capture_events_from_segments() -> None:
         },
         segment_events=[
             {
-                "type": "orbitInsertionBurn",
+                "type": "orbitInsertionBurnStart",
                 "epoch": "2026-01-05T00:00:00Z",
-                "title": "Orbit Insertion Burn",
-                "description": "Perform the primary capture burn at Mars arrival.",
+                "title": "Orbit Insertion Burn Start",
+                "description": "Begin the primary capture burn at Mars arrival.",
+                "relatedBody": "mars",
+            },
+            {
+                "type": "orbitInsertionBurnEnd",
+                "epoch": "2026-01-05T00:15:00Z",
+                "title": "Orbit Insertion Burn End",
+                "description": "Complete the primary capture burn at Mars arrival.",
                 "relatedBody": "mars",
             },
             {
@@ -129,7 +136,8 @@ def test_build_timeline_includes_capture_events_from_segments() -> None:
         ],
     )
 
-    assert any(event["type"] == "orbitInsertionBurn" for event in timeline["events"])
+    assert any(event["type"] == "orbitInsertionBurnStart" for event in timeline["events"])
+    assert any(event["type"] == "orbitInsertionBurnEnd" for event in timeline["events"])
     assert any(event["type"] == "captureEstablished" for event in timeline["events"])
 
 
@@ -156,3 +164,48 @@ def test_build_timeline_accepts_segment_events_with_start_epoch() -> None:
     )
 
     assert any(event["type"] == "dsm-1" for event in timeline["events"])
+
+
+def test_build_timeline_includes_encounter_phase_from_segment_events() -> None:
+    timeline = build_mission_timeline(
+        launch_epoch="2026-01-01T00:00:00Z",
+        flight_time_seconds=30.0 * 24.0 * 3600.0,
+        target_body="jupiter",
+        samples=[_sample(0.0), _sample(15.0 * 24.0 * 3600.0), _sample(30.0 * 24.0 * 3600.0)],
+        closest_approach={
+            "bodyId": "jupiter",
+            "epoch": "2026-01-31T00:00:00Z",
+            "distanceKm": 50_000.0,
+            "epochSeconds": 30.0 * 24.0 * 3600.0,
+        },
+        segment_events=[
+            {
+                "type": "sphereOfInfluenceEntry",
+                "epoch": "2026-01-30T12:00:00Z",
+                "title": "Jupiter SOI Entry",
+                "description": "Enter Jupiter encounter corridor.",
+                "relatedBody": "jupiter",
+            },
+            {
+                "type": "hyperbolicPeriapsis",
+                "epoch": "2026-01-31T00:00:00Z",
+                "title": "Jupiter Hyperbolic Periapsis",
+                "description": "Pass flyby periapsis at Jupiter.",
+                "relatedBody": "jupiter",
+            },
+            {
+                "type": "sphereOfInfluenceExit",
+                "epoch": "2026-01-31T12:00:00Z",
+                "title": "Jupiter SOI Exit",
+                "description": "Exit Jupiter encounter corridor.",
+                "relatedBody": "jupiter",
+            },
+        ],
+    )
+
+    phase_types = [phase["type"] for phase in timeline["phases"]]
+
+    assert "flybyEncounter" in phase_types
+    assert any(event["type"] == "sphereOfInfluenceEntry" for event in timeline["events"])
+    assert any(event["type"] == "hyperbolicPeriapsis" for event in timeline["events"])
+    assert any(event["type"] == "sphereOfInfluenceExit" for event in timeline["events"])

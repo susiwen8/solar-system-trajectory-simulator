@@ -344,7 +344,7 @@ class MissionService:
             heliocentric_sample=_closest_sample(samples, float(closest_approach["epochSeconds"])),
             orbit_summary=_default_arrival_orbit_summary(request.targetBody),
         )
-        segment_payloads.append(segment_to_dict(arrival_capture_plan))
+        segment_payloads.extend(segment_to_dict(segment) for segment in arrival_capture_plan.segments)
         return segment_payloads
 
 

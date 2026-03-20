@@ -76,30 +76,30 @@ export function buildProbeCameraFrame(
 function cinematicOffsets(mode: ProbeCameraView["mode"]) {
   if (mode === "flyby-emphasis") {
     return {
-      behind: 8,
-      height: 2.6,
-      lateral: 4.4,
-      lookAhead: 6.5,
-      lookLift: 0.5,
+      behind: 5.2,
+      height: 1.7,
+      lateral: 3.1,
+      lookAhead: 5,
+      lookLift: 0.35,
     };
   }
 
   if (mode === "approach-emphasis") {
     return {
-      behind: 10.5,
-      height: 3.8,
+      behind: 6.8,
+      height: 2.2,
       lateral: 0,
-      lookAhead: 8.5,
-      lookLift: 0.7,
+      lookAhead: 6.1,
+      lookLift: 0.45,
     };
   }
 
   return {
-    behind: 15,
-    height: 5.8,
+    behind: 8.2,
+    height: 2.6,
     lateral: 0,
-    lookAhead: 12,
-    lookLift: 1,
+    lookAhead: 7.2,
+    lookLift: 0.45,
   };
 }
 

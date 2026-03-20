@@ -14,10 +14,12 @@ import TrajectoryInsetMap from "./TrajectoryInsetMap";
 import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
 import { buildProbeCameraFrame } from "../lib/camera-frame";
 import {
-  advanceCameraMotion,
-  advanceProbeMotion,
   type CameraMotionState,
   type ProbeMotionState,
+  interpolateCameraMotion,
+  interpolateProbeMotion,
+  isCameraMotionClose,
+  isProbeMotionClose,
 } from "../lib/camera-motion";
 import {
   applyOrbitDragDelta,
@@ -30,6 +32,7 @@ import {
   computeFocusBodyVisualProfile,
   getPlanetaryRingProfile,
 } from "../lib/focus-visuals";
+import { areBodyStatesClose, interpolateBodyStates } from "../lib/body-motion";
 import { buildInsetMapModel } from "../lib/inset-map";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
 import { resolveProbeAttitudeDirection } from "../lib/probe-attitude";
@@ -38,6 +41,10 @@ import {
   PROBE_MODEL_ALIGNMENT_YAW_RAD,
   PROBE_VISUAL_SCALE,
 } from "../lib/probe-model";
+import {
+  BODY_PHYSICAL_RADII_KM,
+  sceneBodyRadiusFromPhysicalKm,
+} from "../lib/body-physics";
 import { scaleDistanceKm } from "../lib/scale";
 import {
   buildSpeedTelemetry,
@@ -64,18 +71,24 @@ type SolarSystemSceneProps = {
 };
 
 type SceneRuntime = {
+  bodyTransition: MotionTransition<BodyState[]> | null;
+  bodyVisuals: Map<string, BodyVisualRuntime>;
+  currentBodies: BodyState[] | null;
   bodiesGroup: THREE.Group;
   camera: THREE.PerspectiveCamera;
   frameHandle: number | null;
   currentMotion: CameraMotionState | null;
   currentProbeMotion: ProbeMotionState | null;
+  motionTransition: MotionTransition<CameraMotionState> | null;
   missionGroup: THREE.Group;
   playbackGroup: THREE.Group;
+  probeMotionTransition: MotionTransition<ProbeMotionState> | null;
   probeVisual: ProbeVisualRuntime;
   renderer: THREE.WebGLRenderer;
   resizeObserver: ResizeObserver | null;
   render: () => void;
   scene: THREE.Scene;
+  targetBodies: BodyState[] | null;
   targetMotion: CameraMotionState | null;
   targetProbeMotion: ProbeMotionState | null;
   setProbeTarget: (motion: ProbeMotionState) => void;
@@ -89,6 +102,13 @@ type SceneRuntime = {
   stop: () => void;
 };
 
+type MotionTransition<T> = {
+  durationMs: number;
+  source: T;
+  startTimeMs: number;
+  target: T;
+};
+
 type ProbeVisualRuntime = {
   engineGlowMaterial: THREE.MeshStandardMaterial;
   group: THREE.Group;
@@ -96,6 +116,11 @@ type ProbeVisualRuntime = {
     material: THREE.LineBasicMaterial;
     opacityScale: number;
   }>;
+};
+
+type BodyVisualRuntime = {
+  group: THREE.Group;
+  styleKey: string;
 };
 
 const bodyColors: Record<string, string> = {
@@ -110,21 +135,10 @@ const bodyColors: Record<string, string> = {
   neptune: "#6f93ff"
 };
 
-const bodyRadii: Record<string, number> = {
-  sun: 10,
-  mercury: 2.6,
-  venus: 3.4,
-  earth: 3.6,
-  mars: 3.1,
-  jupiter: 6.4,
-  saturn: 5.8,
-  uranus: 4.8,
-  neptune: 4.7
-};
-
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 2.4;
 const DEFAULT_ZOOM = 1.15;
+const PLAYBACK_TRANSITION_MS = 80;
 
 type PointerOrbitGesture = {
   pointerId: number;
@@ -172,7 +186,7 @@ export default function SolarSystemScene({
   const displayedCapturePathPoints = arrivalCaptureModel
     ? buildDisplayCapturePathPoints(
         arrivalCaptureModel.pathPoints,
-        bodyRadii[arrivalCaptureModel.bodyId] ?? 1.8,
+        bodySceneRadius(arrivalCaptureModel.bodyId),
       )
     : null;
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
@@ -584,28 +598,52 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
       }
     };
 
-    const tick = () => {
+    const tick = (now: number) => {
       let needsRender = false;
 
-      if (runtime.targetMotion) {
-        const nextMotion = runtime.currentMotion
-          ? advanceCameraMotion(runtime.currentMotion, runtime.targetMotion, 0.16)
-          : runtime.targetMotion;
+      if (runtime.bodyTransition) {
+        const alpha = clamp((now - runtime.bodyTransition.startTimeMs) / runtime.bodyTransition.durationMs, 0, 1);
+        const nextBodies =
+          alpha >= 1
+            ? runtime.bodyTransition.target
+            : interpolateBodyStates(runtime.bodyTransition.source, runtime.bodyTransition.target, alpha);
+        applyBodyStates(runtime, nextBodies);
+        runtime.currentBodies = nextBodies;
+        needsRender = true;
+        if (alpha >= 1) {
+          runtime.bodyTransition = null;
+        }
+      }
+
+      if (runtime.motionTransition) {
+        const alpha = clamp((now - runtime.motionTransition.startTimeMs) / runtime.motionTransition.durationMs, 0, 1);
+        const nextMotion =
+          alpha >= 1
+            ? runtime.motionTransition.target
+            : interpolateCameraMotion(runtime.motionTransition.source, runtime.motionTransition.target, alpha);
         if (nextMotion !== runtime.currentMotion) {
           runtime.currentMotion = nextMotion;
           applyMotion(runtime.currentMotion);
           needsRender = true;
         }
+        if (alpha >= 1) {
+          runtime.motionTransition = null;
+        }
       }
 
-      if (runtime.targetProbeMotion) {
-        const nextProbeMotion = runtime.currentProbeMotion
-          ? advanceProbeMotion(runtime.currentProbeMotion, runtime.targetProbeMotion, 0.22)
-          : runtime.targetProbeMotion;
+      if (runtime.probeMotionTransition) {
+        const alpha = clamp((now - runtime.probeMotionTransition.startTimeMs) / runtime.probeMotionTransition.durationMs, 0, 1);
+        const nextProbeMotion =
+          alpha >= 1
+            ? runtime.probeMotionTransition.target
+            : interpolateProbeMotion(runtime.probeMotionTransition.source, runtime.probeMotionTransition.target, alpha);
         if (nextProbeMotion !== runtime.currentProbeMotion) {
           runtime.currentProbeMotion = nextProbeMotion;
           applyProbeMotion(runtime.currentProbeMotion);
           needsRender = true;
+        }
+        if (alpha >= 1) {
+          runtime.probeMotionTransition = null;
         }
       }
 
@@ -625,49 +663,92 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     };
 
     const runtime: SceneRuntime = {
+      bodyTransition: null,
+      bodyVisuals: new Map(),
+      currentBodies: null,
       bodiesGroup,
       camera,
       frameHandle: null,
       currentMotion: null,
       currentProbeMotion: null,
+      motionTransition: null,
       missionGroup,
       playbackGroup,
+      probeMotionTransition: null,
       probeVisual,
       renderer,
       render,
       resizeObserver: null,
       scene,
+      targetBodies: null,
       targetMotion: null,
       targetProbeMotion: null,
       setProbeTarget: (motion) => {
+        if (runtime.targetProbeMotion && isProbeMotionClose(runtime.targetProbeMotion, motion)) {
+          return;
+        }
         runtime.targetProbeMotion = motion;
         if (!runtime.currentProbeMotion) {
+          runtime.probeMotionTransition = null;
           runtime.currentProbeMotion = runtime.targetProbeMotion;
           applyProbeMotion(runtime.currentProbeMotion);
           render();
+          return;
         }
+
+        runtime.probeMotionTransition = {
+          durationMs: PLAYBACK_TRANSITION_MS,
+          source: runtime.currentProbeMotion,
+          startTimeMs: performance.now(),
+          target: motion,
+        };
       },
       setView: (samplePositionKm, view, zoom, orbitState) => {
         const frame = buildProbeCameraFrame(samplePositionKm, view, zoom, orbitState);
 
-        runtime.targetMotion = {
+        const nextTarget = {
           position: frame.position,
           lookAt: frame.lookAt,
           fovDeg: frame.fovDeg,
           zoom: frame.zoom,
         };
+        if (runtime.targetMotion && isCameraMotionClose(runtime.targetMotion, nextTarget)) {
+          return;
+        }
+        runtime.targetMotion = nextTarget;
         if (!runtime.currentMotion) {
+          runtime.motionTransition = null;
           runtime.currentMotion = runtime.targetMotion;
           applyMotion(runtime.currentMotion);
           render();
+          return;
         }
+
+        runtime.motionTransition = {
+          durationMs: PLAYBACK_TRANSITION_MS,
+          source: runtime.currentMotion,
+          startTimeMs: performance.now(),
+          target: nextTarget,
+        };
       },
       setZoom: (zoom: number) => {
         if (runtime.targetMotion) {
-          runtime.targetMotion = {
+          const nextTarget = {
             ...runtime.targetMotion,
             zoom,
           };
+          if (isCameraMotionClose(runtime.targetMotion, nextTarget)) {
+            return;
+          }
+          runtime.targetMotion = nextTarget;
+          if (runtime.currentMotion) {
+            runtime.motionTransition = {
+              durationMs: PLAYBACK_TRANSITION_MS,
+              source: runtime.currentMotion,
+              startTimeMs: performance.now(),
+              target: nextTarget,
+            };
+          }
         }
       },
       stop: () => {
@@ -758,7 +839,22 @@ function syncPlaybackScene(
   displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
 ) {
   clearGroup(runtime.playbackGroup);
-  clearGroup(runtime.bodiesGroup);
+  syncBodyVisuals(runtime, bodies, hoveredBodyId, cameraView, result.closestApproach.bodyId);
+
+  if (!runtime.currentBodies) {
+    runtime.currentBodies = bodies;
+    runtime.targetBodies = bodies;
+    runtime.bodyTransition = null;
+    applyBodyStates(runtime, bodies);
+  } else if (!runtime.targetBodies || !areBodyStatesClose(runtime.targetBodies, bodies)) {
+    runtime.targetBodies = bodies;
+    runtime.bodyTransition = {
+      durationMs: PLAYBACK_TRANSITION_MS,
+      source: runtime.currentBodies,
+      startTimeMs: performance.now(),
+      target: bodies,
+    };
+  }
 
   if (activeSample && cameraView) {
     runtime.setView(
@@ -771,6 +867,7 @@ function syncPlaybackScene(
   } else {
     runtime.probeVisual.group.visible = false;
     runtime.currentProbeMotion = null;
+    runtime.probeMotionTransition = null;
     runtime.targetProbeMotion = null;
   }
 
@@ -787,17 +884,6 @@ function syncPlaybackScene(
   if (displayedCapturePathPoints && captureCenter) {
     runtime.playbackGroup.add(
       createCaptureOrbitLine(displayedCapturePathPoints, captureCenter, "#ffd59a", 0.96),
-    );
-  }
-
-  for (const body of bodies) {
-    runtime.bodiesGroup.add(
-      createBodyMesh(
-        body,
-        hoveredBodyId === body.bodyId,
-        body.bodyId === cameraView?.focusBodyId || body.bodyId === result.closestApproach.bodyId,
-        body.bodyId === cameraView?.focusBodyId ? cameraView.focusBodyScale : 1,
-      ),
     );
   }
 
@@ -829,6 +915,69 @@ function clearGroup(group: THREE.Group) {
     const child = group.children[0];
     group.remove(child);
     disposeObject(child);
+  }
+}
+
+function syncBodyVisuals(
+  runtime: SceneRuntime,
+  bodies: BodyState[],
+  hoveredBodyId: string | null,
+  cameraView: ProbeCameraView | null,
+  closestApproachBodyId: string,
+) {
+  const desiredIds = new Set(bodies.map((body) => body.bodyId));
+
+  for (const [bodyId, visual] of runtime.bodyVisuals.entries()) {
+    if (desiredIds.has(bodyId)) {
+      continue;
+    }
+    runtime.bodiesGroup.remove(visual.group);
+    disposeObject(visual.group);
+    runtime.bodyVisuals.delete(bodyId);
+  }
+
+  for (const body of bodies) {
+    const isHighlighted = hoveredBodyId === body.bodyId;
+    const isFocusBody = body.bodyId === cameraView?.focusBodyId || body.bodyId === closestApproachBodyId;
+    const focusScale = body.bodyId === cameraView?.focusBodyId ? cameraView.focusBodyScale : 1;
+    const styleKey = `${isHighlighted}:${isFocusBody}:${focusScale}`;
+    const existing = runtime.bodyVisuals.get(body.bodyId);
+
+    if (existing && existing.styleKey === styleKey) {
+      continue;
+    }
+
+    const displayedBody = runtime.currentBodies?.find((candidate) => candidate.bodyId === body.bodyId) ?? body;
+    const group = createBodyMesh(
+      {
+        ...body,
+        positionKm: displayedBody.positionKm,
+      },
+      isHighlighted,
+      isFocusBody,
+      focusScale,
+    );
+
+    if (existing) {
+      runtime.bodiesGroup.remove(existing.group);
+      disposeObject(existing.group);
+    }
+
+    runtime.bodiesGroup.add(group);
+    runtime.bodyVisuals.set(body.bodyId, {
+      group,
+      styleKey,
+    });
+  }
+}
+
+function applyBodyStates(runtime: SceneRuntime, bodies: BodyState[]) {
+  for (const body of bodies) {
+    const visual = runtime.bodyVisuals.get(body.bodyId);
+    if (!visual) {
+      continue;
+    }
+    visual.group.position.copy(toThreeVector(body.positionKm));
   }
 }
 
@@ -1045,7 +1194,7 @@ function createAnchorMesh(
   halo.rotation.x = -Math.PI / 2;
   group.add(halo);
 
-  const coreGeometry = new THREE.SphereGeometry((bodyRadii[bodyId] ?? 1.8) * 0.78, 20, 20);
+  const coreGeometry = new THREE.SphereGeometry(bodySceneRadius(bodyId) * 0.78, 20, 20);
   const coreMaterial = new THREE.MeshStandardMaterial({
     color: bodyColors[bodyId] ?? "#f5f3ed",
     emissive: bodyColors[bodyId] ?? "#f5f3ed",
@@ -1072,7 +1221,7 @@ function createAnchorMesh(
 }
 
 function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
-  const radius = bodyRadii[body.bodyId] ?? 1.8;
+  const radius = bodySceneRadius(body.bodyId);
   const group = new THREE.Group();
   const focusVisual = isFocusBody ? computeFocusBodyVisualProfile(body.bodyId, focusScale >= 2 ? "flyby-emphasis" : focusScale > 1 ? "approach-emphasis" : "cruise-follow") : null;
   const ringProfile = getPlanetaryRingProfile(body.bodyId);
@@ -1119,7 +1268,7 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: bo
     }
   }
   if (isHighlighted || isFocusBody) {
-    group.scale.setScalar(isFocusBody ? focusScale : 1.2);
+    group.scale.setScalar(isFocusBody ? Math.min(focusScale, 1.04) : 1.06);
   }
   return group;
 }
@@ -1288,6 +1437,13 @@ function toThreeVector(positionKm: [number, number, number]) {
     scaleDistanceKm(positionKm[2]) * 0.8,
     scaleDistanceKm(positionKm[1]) * 1.8
   );
+}
+
+function bodySceneRadius(bodyId: string) {
+  const physicalRadiusKm =
+    BODY_PHYSICAL_RADII_KM[bodyId as keyof typeof BODY_PHYSICAL_RADII_KM] ??
+    BODY_PHYSICAL_RADII_KM.earth;
+  return sceneBodyRadiusFromPhysicalKm(physicalRadiusKm);
 }
 
 function toThreeDirection(direction: [number, number, number]) {

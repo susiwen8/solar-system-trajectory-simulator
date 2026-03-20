@@ -3,6 +3,11 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+class FailingHorizonsClient:
+    def fetch_vectors(self, *, body_id: str, start_epoch: str, stop_epoch: str, step_size: str) -> dict:
+        raise RuntimeError("network unavailable")
+
+
 def test_propagate_returns_samples_and_metrics() -> None:
     client = TestClient(app)
     response = client.post(
@@ -146,12 +151,46 @@ def test_propagate_returns_launch_and_escape_segments() -> None:
     assert "launchParkingOrbit" in segment_types
     assert "earthEscape" in segment_types
     assert "heliocentricCruise" in segment_types
-    assert "arrivalCapture" in segment_types
+    assert "arrivalHyperbolicApproach" in segment_types
+    assert "orbitInsertionBurn" in segment_types
+    assert "parkingOrbit" in segment_types
     cruise_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "heliocentricCruise")
-    arrival_capture_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "arrivalCapture")
+    arrival_approach_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "arrivalHyperbolicApproach")
+    insertion_burn_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "orbitInsertionBurn")
+    parking_orbit_segment = next(segment for segment in data["segments"] if segment["segmentType"] == "parkingOrbit")
     assert cruise_segment["metadata"]["targetBody"] == "mars"
     assert "massSummary" in cruise_segment
     assert any(event["type"] == "earthSoiExit" for event in data["missionTimeline"]["events"])
-    assert arrival_capture_segment["orbitSummary"]["isBound"] is True
-    assert arrival_capture_segment["samples"]
+    assert any(event["type"] == "hyperbolicPeriapsis" for event in arrival_approach_segment["events"])
+    assert any(event["type"] == "orbitInsertionBurnStart" for event in insertion_burn_segment["events"])
+    assert parking_orbit_segment["orbitSummary"]["isBound"] is True
+    assert parking_orbit_segment["samples"]
     assert any(event["type"] == "captureEstablished" for event in data["missionTimeline"]["events"])
+
+
+def test_propagate_falls_back_cleanly_when_online_jpl_is_unavailable(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("SOLAR_SYSTEM_ENABLE_ONLINE_JPL", "1")
+    monkeypatch.setenv("SOLAR_SYSTEM_EPHEMERIS_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "app.core.ephemeris.factory._build_online_client",
+        lambda: FailingHorizonsClient(),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/missions/propagate",
+        json={
+            "departureBody": "earth",
+            "targetBody": "mars",
+            "launchEpoch": "2026-01-01T00:00:00Z",
+            "initialState": {
+                "launchFromBody": {
+                    "mode": "autoTransfer"
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["samples"]) > 100

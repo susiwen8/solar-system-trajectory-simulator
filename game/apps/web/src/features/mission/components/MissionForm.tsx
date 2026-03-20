@@ -1,22 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { planetLabel, t, type Language } from "../../../lib/i18n";
-import type { BodyId, MissionRequest, MissionTourRequest, PropulsionConfig } from "../types";
+import type {
+  BodyId,
+  LaunchPlanningMode,
+  LaunchWindowResponse,
+  MissionRequest,
+  MissionTourRequest,
+  PropulsionConfig,
+} from "../types";
+
+export type MissionLaunchPlanning = {
+  mode: LaunchPlanningMode;
+  earliestLaunchEpoch: string;
+  selectedLaunchEpoch?: string | null;
+};
 
 export type MissionSubmission =
   | {
       kind: "trajectory";
       request: MissionRequest;
+      launchPlanning: MissionLaunchPlanning;
     }
   | {
       kind: "tour";
       request: MissionTourRequest;
+      launchPlanning: MissionLaunchPlanning;
     };
 
 type MissionFormProps = {
   onSubmit: (submission: MissionSubmission) => void | Promise<void>;
   language: Language;
   loading: boolean;
+  launchWindowResult?: LaunchWindowResponse | null;
 };
 
 const visitPlanets = ["mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"] as const satisfies readonly Exclude<BodyId, "earth">[];
@@ -51,13 +67,21 @@ const defaultPropulsionConfig: PropulsionConfig = {
   ispSeconds: 3200,
 };
 
-export default function MissionForm({ onSubmit, language, loading }: MissionFormProps) {
+export default function MissionForm({ onSubmit, language, loading, launchWindowResult = null }: MissionFormProps) {
   const [selectedBodies, setSelectedBodies] = useState<Exclude<BodyId, "earth">[]>(["mars"]);
   const [trajectoryRequest, setTrajectoryRequest] = useState<MissionRequest>(defaultTrajectoryRequest);
   const [propulsionConfig, setPropulsionConfig] = useState<PropulsionConfig | null>(null);
+  const [launchPlanningMode, setLaunchPlanningMode] = useState<LaunchPlanningMode>("recommendedWindow");
+  const [selectedWindowLaunchEpoch, setSelectedWindowLaunchEpoch] = useState("");
   const copy = t(language);
   const isSingleDestination = selectedBodies.length <= 1;
   const trajectoryMode = trajectoryRequest.initialState.launchFromBody ? "autoTransfer" : "stateVector";
+
+  useEffect(() => {
+    if (launchWindowResult?.recommendedLaunchEpoch) {
+      setSelectedWindowLaunchEpoch((current) => current || launchWindowResult.recommendedLaunchEpoch);
+    }
+  }, [launchWindowResult]);
 
   function updateLaunchEpoch(value: string) {
     setTrajectoryRequest((current) => ({ ...current, launchEpoch: value }));
@@ -159,6 +183,15 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
       return;
     }
 
+    const launchPlanning: MissionLaunchPlanning = {
+      mode: launchPlanningMode,
+      earliestLaunchEpoch: trajectoryRequest.launchEpoch,
+      selectedLaunchEpoch:
+        launchPlanningMode === "windowSelect"
+          ? selectedWindowLaunchEpoch || launchWindowResult?.recommendedLaunchEpoch || trajectoryRequest.launchEpoch
+          : null,
+    };
+
     if (selectedBodies.length === 1) {
       await onSubmit({
         kind: "trajectory",
@@ -167,6 +200,7 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
           targetBody: selectedBodies[0],
           propulsionConfig: propulsionConfig ?? undefined,
         },
+        launchPlanning,
       });
       return;
     }
@@ -180,6 +214,7 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
         propulsionConfig: propulsionConfig ?? undefined,
         ...defaultPlannerOptions,
       },
+      launchPlanning,
     });
   }
 
@@ -200,15 +235,52 @@ export default function MissionForm({ onSubmit, language, loading }: MissionForm
             </label>
 
             <label className="mission-field">
-              <span>{copy.launchEpoch}</span>
+              <span>{launchPlanningMode === "manual" ? copy.launchEpoch : copy.earliestLaunchEpoch}</span>
               <input
-                aria-label={copy.launchEpoch}
+                aria-label={launchPlanningMode === "manual" ? copy.launchEpoch : copy.earliestLaunchEpoch}
                 value={trajectoryRequest.launchEpoch}
                 disabled={loading}
                 onChange={(event) => updateLaunchEpoch(event.target.value)}
               />
             </label>
           </div>
+
+          <div className="mission-form__grid mission-form__grid--two">
+            <label className="mission-field">
+              <span>{copy.launchPlanningMode}</span>
+              <select
+                aria-label={copy.launchPlanningMode}
+                value={launchPlanningMode}
+                disabled={loading}
+                onChange={(event) => setLaunchPlanningMode(event.target.value as LaunchPlanningMode)}
+              >
+                <option value="recommendedWindow">{copy.recommendedWindowMode}</option>
+                <option value="windowSelect">{copy.windowSelectMode}</option>
+                <option value="manual">{copy.manualLaunchMode}</option>
+              </select>
+            </label>
+
+            {launchPlanningMode === "windowSelect" ? (
+              <label className="mission-field">
+                <span>{copy.selectedLaunchEpoch}</span>
+                <input
+                  aria-label={copy.selectedLaunchEpoch}
+                  value={selectedWindowLaunchEpoch}
+                  disabled={loading}
+                  onChange={(event) => setSelectedWindowLaunchEpoch(event.target.value)}
+                />
+              </label>
+            ) : null}
+          </div>
+
+          {launchWindowResult && launchPlanningMode !== "manual" ? (
+            <div className="summary-card summary-card--placeholder">
+              <p className="summary-card__eyebrow">{copy.recommendedLaunchWindow}</p>
+              <p>{`${copy.recommendedLaunchWindow}: ${launchWindowResult.windowStartEpoch} -> ${launchWindowResult.windowEndEpoch}`}</p>
+              <p>{`${copy.recommendedLaunchDate}: ${launchWindowResult.recommendedLaunchEpoch}`}</p>
+              <p>{`${copy.launchWindowCandidates}: ${launchWindowResult.candidateLaunches.length}`}</p>
+            </div>
+          ) : null}
 
           <div className="summary-card summary-card--placeholder">
             <p className="summary-card__eyebrow">{copy.visitPlanets}</p>

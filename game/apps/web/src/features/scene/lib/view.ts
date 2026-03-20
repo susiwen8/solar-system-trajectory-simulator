@@ -1,5 +1,5 @@
 import type { BodyState, TrajectorySample } from "../../mission/types";
-import { scaleDistanceKm } from "./scale";
+import { scaleOverviewDistanceKm } from "./scale";
 
 export type BirdsEyeFrame = {
   center: {
@@ -11,8 +11,8 @@ export type BirdsEyeFrame = {
 
 export function computeBirdsEyeFrame(samples: TrajectorySample[], bodies: BodyState[]): BirdsEyeFrame {
   const samplePoints = samples.map((sample) => ({
-    x: scaleDistanceKm(sample.positionKm[0]) * 1.8,
-    z: scaleDistanceKm(sample.positionKm[1]) * 1.8,
+    x: scaleOverviewDistanceKm(sample.positionKm[0]) * 1.8,
+    z: scaleOverviewDistanceKm(sample.positionKm[1]) * 1.8,
   }));
   const sampleMaxRadius = Math.max(
     ...samplePoints.map((point) => Math.sqrt(point.x * point.x + point.z * point.z)),
@@ -22,8 +22,8 @@ export function computeBirdsEyeFrame(samples: TrajectorySample[], bodies: BodySt
     ...samplePoints,
     ...bodies
       .map((body) => ({
-        x: scaleDistanceKm(body.positionKm[0]) * 1.8,
-        z: scaleDistanceKm(body.positionKm[1]) * 1.8,
+        x: scaleOverviewDistanceKm(body.positionKm[0]) * 1.8,
+        z: scaleOverviewDistanceKm(body.positionKm[1]) * 1.8,
       }))
       .filter((point) => Math.sqrt(point.x * point.x + point.z * point.z) <= sampleMaxRadius * 1.2),
   ];

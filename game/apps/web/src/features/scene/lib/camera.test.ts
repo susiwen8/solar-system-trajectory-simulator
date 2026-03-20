@@ -47,6 +47,7 @@ describe("computeProbeCameraView", () => {
     expect(view.mode).toBe("cruise-follow");
     expect(view.focusBodyId).toBe("mars");
     expect(view.fovDeg).toBeGreaterThan(45);
+    expect(Math.abs(view.cameraOffsetKm[0])).toBeLessThan(24_000);
     expect(view.cameraOffsetKm[1]).toBeGreaterThan(0);
     expect(view.focusBodyScale).toBe(1);
   });
@@ -68,9 +69,9 @@ describe("computeProbeCameraView", () => {
     expect(view.focusBodyScale).toBeGreaterThan(1);
   });
 
-  it("switches to flyby framing for gravity-assist segments", () => {
+  it("switches to flyby framing for encounter flyby segments", () => {
     const activeSegment: MissionSegment = {
-      segmentType: "gravityAssistFlyby",
+      segmentType: "flybyEncounter",
       startEpoch: "2026-07-01T00:00:00.000Z",
       endEpoch: "2026-07-02T00:00:00.000Z",
       samples: [],
@@ -110,6 +111,7 @@ describe("computeProbeCameraView", () => {
     expect(view.focusBodyId).toBe("jupiter");
     expect(view.fovDeg).toBeLessThan(45);
     expect(view.cameraOffsetKm[2]).toBeGreaterThan(0);
+    expect(view.cameraOffsetKm[2]).toBeLessThan(5_000);
     expect(view.focusBodyScale).toBeGreaterThan(2);
   });
 });

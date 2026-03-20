@@ -9,7 +9,13 @@ export type InsetMapBodyPoint = InsetMapPoint & {
   bodyId: string;
 };
 
+export type InsetMapOrbitPath = {
+  bodyId: string;
+  points: InsetMapPoint[];
+};
+
 export type InsetMapModel = {
+  orbitPaths: InsetMapOrbitPath[];
   pathPoints: InsetMapPoint[];
   currentProbePoint: InsetMapPoint;
   targetBody: InsetMapBodyPoint | null;
@@ -31,6 +37,7 @@ export type BuildInsetMapModelInput = {
 
 const VIEWBOX = { width: 220, height: 220 };
 const PADDING = 18;
+const ORBIT_SEGMENTS = 96;
 
 export function buildInsetMapModel({
   samples,
@@ -53,22 +60,31 @@ export function buildInsetMapModel({
       (body) => body.bodyId === closestApproach.bodyId || body.bodyId === flybyBodyId || body.bodyId === "earth",
     ),
   );
-  const points = [
-    ...samples.map((sample) => sample.positionKm),
-    ...relevantBodies.map((body) => body.positionKm),
-    [0, 0, 0] as [number, number, number],
-  ];
+  const orbitDefinitions = relevantBodies.map((body) => ({
+    bodyId: body.bodyId,
+    radiusKm: Math.hypot(body.positionKm[0], body.positionKm[1]),
+  }));
+  const maxRadiusKm = Math.max(
+    1,
+    ...samples.map((sample) => Math.hypot(sample.positionKm[0], sample.positionKm[1])),
+    ...relevantBodies.map((body) => Math.hypot(body.positionKm[0], body.positionKm[1])),
+    ...orbitDefinitions.map((orbit) => orbit.radiusKm),
+  );
 
-  const { minX, maxX, minY, maxY } = getBounds(points);
   const safeIndex = Math.min(Math.max(selectedSampleIndex, 0), Math.max(samples.length - 1, 0));
-  const pathPoints = samples.map((sample) => projectPoint(sample.positionKm, minX, maxX, minY, maxY));
-  const currentProbePoint = pathPoints[safeIndex] ?? projectPoint([0, 0, 0], minX, maxX, minY, maxY);
+  const pathPoints = samples.map((sample) => projectPoint(sample.positionKm, maxRadiusKm));
+  const currentProbePoint = pathPoints[safeIndex] ?? projectPoint([0, 0, 0], maxRadiusKm);
   const visibleBodies = relevantBodies.map((body) => ({
     bodyId: body.bodyId,
-    ...projectPoint(body.positionKm, minX, maxX, minY, maxY),
+    ...projectPoint(body.positionKm, maxRadiusKm),
+  }));
+  const orbitPaths = orbitDefinitions.map((orbit) => ({
+    bodyId: orbit.bodyId,
+    points: buildCircularOrbitPoints(orbit.radiusKm).map((point) => projectPoint(point, maxRadiusKm)),
   }));
 
   return {
+    orbitPaths,
     pathPoints,
     currentProbePoint,
     targetBody: visibleBodies.find((body) => body.bodyId === closestApproach.bodyId) ?? null,
@@ -80,29 +96,27 @@ export function buildInsetMapModel({
 
 function projectPoint(
   [xKm, yKm]: [number, number, number],
-  minX: number,
-  maxX: number,
-  minY: number,
-  maxY: number,
+  maxRadiusKm: number,
 ): InsetMapPoint {
-  const width = Math.max(maxX - minX, 1);
-  const height = Math.max(maxY - minY, 1);
+  const drawableRadius = (Math.min(VIEWBOX.width, VIEWBOX.height) - PADDING * 2) / 2;
+  const scale = drawableRadius / Math.max(maxRadiusKm, 1);
+  const centerX = VIEWBOX.width / 2;
+  const centerY = VIEWBOX.height / 2;
   return {
-    x: PADDING + ((xKm - minX) / width) * (VIEWBOX.width - PADDING * 2),
-    y: VIEWBOX.height - PADDING - ((yKm - minY) / height) * (VIEWBOX.height - PADDING * 2),
+    x: centerX + xKm * scale,
+    y: centerY - yKm * scale,
   };
 }
 
-function getBounds(points: Array<[number, number, number]>) {
-  const xs = points.map((point) => point[0]);
-  const ys = points.map((point) => point[1]);
-
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys),
-  };
+function buildCircularOrbitPoints(radiusKm: number): Array<[number, number, number]> {
+  return Array.from({ length: ORBIT_SEGMENTS + 1 }, (_, index) => {
+    const theta = (index / ORBIT_SEGMENTS) * Math.PI * 2;
+    return [
+      Math.cos(theta) * radiusKm,
+      Math.sin(theta) * radiusKm,
+      0,
+    ] as [number, number, number];
+  });
 }
 
 function uniqueBodies(bodies: BodyState[]) {

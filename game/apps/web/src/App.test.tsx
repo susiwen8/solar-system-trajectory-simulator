@@ -3,12 +3,90 @@ import userEvent from "@testing-library/user-event";
 
 import App from "./App";
 
+const EMPTY_PREVIEW_EPOCH = "2026-01-01T00:00:00Z";
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 function hasExactTextContent(text: string) {
   return (_content: string, node: Element | null) => node?.textContent === text;
+}
+
+function createJsonResponse(body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+function createEphemerisResponse(
+  overrides: {
+    epoch?: string;
+    ephemerisSource?: string;
+    bodies?: Array<Record<string, unknown>>;
+  } = {},
+) {
+  const epoch = overrides.epoch ?? EMPTY_PREVIEW_EPOCH;
+  return createJsonResponse({
+    referenceFrame: "heliocentric-inertial",
+    epoch,
+    ephemerisSource: overrides.ephemerisSource ?? "mixed",
+    bodies:
+      overrides.bodies ?? [
+        {
+          bodyId: "sun",
+          epoch,
+          positionKm: [0, 0, 0],
+          velocityKmPerSec: [0, 0, 0],
+          muKm3PerS2: 132712440018,
+          sourceName: "keplerian-elements",
+        },
+        {
+          bodyId: "earth",
+          epoch,
+          positionKm: [-24856124, 144936962, 0],
+          velocityKmPerSec: [-29.837, -5.127, 0],
+          muKm3PerS2: 398600.435436,
+          sourceName: "jpl-horizons-file",
+        },
+        {
+          bodyId: "mars",
+          epoch,
+          positionKm: [-159185432, 188245763, 7650983],
+          velocityKmPerSec: [-17.235, -13.254, 0.156],
+          muKm3PerS2: 42828.375816,
+          sourceName: "jpl-horizons-file",
+        },
+      ],
+  });
+}
+
+function createLaunchWindowResponse(overrides: Partial<Record<string, unknown>> = {}) {
+  return createJsonResponse({
+      recommendedLaunchEpoch: "2026-01-01T00:00:00Z",
+      windowStartEpoch: "2025-12-15T00:00:00Z",
+      windowEndEpoch: "2026-01-15T00:00:00Z",
+      candidateLaunches: [
+        {
+          launchEpoch: "2026-01-01T00:00:00Z",
+          score: 1.2,
+          deltaVKmPerS: 3.4,
+          flightTimeSeconds: 259200,
+        },
+      ],
+      searchSummary: {
+        searchStartEpoch: "2026-01-01T00:00:00Z",
+        searchEndEpoch: "2028-01-01T00:00:00Z",
+        coarseSampleCount: 5,
+        refinedCandidateCount: 2,
+        scoringMode: "trajectory-delta-v-first",
+      },
+      warnings: [],
+      ...overrides,
+    });
 }
 
 it("renders the simulator heading", () => {
@@ -31,12 +109,44 @@ it("switches visible interface copy to English", async () => {
   expect(screen.getByRole("button", { name: "Propagate Trajectory" })).toBeInTheDocument();
 });
 
+it("shows the orbit preview in the empty scene instead of the old placeholder copy", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    createEphemerisResponse({
+      bodies: [
+        {
+          bodyId: "sun",
+          epoch: EMPTY_PREVIEW_EPOCH,
+          positionKm: [0, 0, 0],
+          velocityKmPerSec: [0, 0, 0],
+          muKm3PerS2: 132712440018,
+          sourceName: "keplerian-elements",
+        },
+        {
+          bodyId: "earth",
+          epoch: EMPTY_PREVIEW_EPOCH,
+          positionKm: [-24856124, 144936962, 0],
+          velocityKmPerSec: [-29.837, -5.127, 0],
+          muKm3PerS2: 398600.435436,
+          sourceName: "jpl-horizons-file",
+        },
+      ],
+    }),
+  );
+
+  render(<App />);
+
+  expect(await screen.findByTestId("empty-orbit-preview")).toBeInTheDocument();
+  expect(screen.queryByText("运行任务后即可描绘轨迹")).not.toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledWith("/ephemeris/bodies?epoch=2026-01-01T00%3A00%3A00Z");
+});
+
 it("shows the mission metrics panel after propagation results load", async () => {
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -123,8 +233,124 @@ it("shows the mission metrics panel after propagation results load", async () =>
               events: []
             },
             {
-              segmentType: "arrivalCapture",
+              segmentType: "arrivalHyperbolicApproach",
               startEpoch: "2026-01-04T00:00:00.000Z",
+              endEpoch: "2026-01-04T00:00:00.000Z",
+              samples: [
+                {
+                  epochSeconds: 0,
+                  positionKm: [9800, 0, -4800],
+                  velocityKmPerSec: [0, 0, 3.4]
+                },
+                {
+                  epochSeconds: 1800,
+                  positionKm: [5600, 0, -1500],
+                  velocityKmPerSec: [0, 0, 3.1]
+                },
+                {
+                  epochSeconds: 3600,
+                  positionKm: [4200, 0, 0],
+                  velocityKmPerSec: [0, 0, 2.8]
+                }
+              ],
+              initialState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [9800, 0, -4800],
+                velocityKmPerSec: [0, 0, 3.4]
+              },
+              finalState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [4200, 0, 0],
+                velocityKmPerSec: [0, 0, 2.8]
+              },
+              events: [
+                {
+                  id: "mars-soi-entry",
+                  type: "sphereOfInfluenceEntry",
+                  epoch: "2026-01-03T23:00:00.000Z",
+                  title: "Mars SOI Entry",
+                  description: "Enter the encounter corridor around Mars.",
+                  relatedBody: "mars"
+                },
+                {
+                  id: "mars-hyperbolic-periapsis",
+                  type: "hyperbolicPeriapsis",
+                  epoch: "2026-01-04T00:00:00.000Z",
+                  title: "Mars Hyperbolic Periapsis",
+                  description: "Reach capture periapsis at Mars.",
+                  relatedBody: "mars"
+                }
+              ],
+              metadata: {
+                bodyId: "mars",
+                encounterType: "capture",
+                sphereOfInfluenceRadiusKm: 577000,
+                incomingVInfinityKmPerS: 3.4,
+                periapsisRadiusKm: 4200
+              }
+            },
+            {
+              segmentType: "orbitInsertionBurn",
+              startEpoch: "2026-01-04T00:00:00.000Z",
+              endEpoch: "2026-01-04T00:15:00.000Z",
+              samples: [
+                {
+                  epochSeconds: 0,
+                  positionKm: [4200, 0, 0],
+                  velocityKmPerSec: [0, 0, 2.8]
+                },
+                {
+                  epochSeconds: 900,
+                  positionKm: [4200, 0, 0],
+                  velocityKmPerSec: [0, 3.2, 0]
+                }
+              ],
+              initialState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [4200, 0, 0],
+                velocityKmPerSec: [0, 0, 2.8]
+              },
+              finalState: {
+                epoch: "2026-01-04T00:15:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [4200, 0, 0],
+                velocityKmPerSec: [0, 3.2, 0]
+              },
+              events: [
+                {
+                  id: "mars-orbit-insertion-burn-start",
+                  type: "orbitInsertionBurnStart",
+                  epoch: "2026-01-04T00:00:00.000Z",
+                  title: "Orbit Insertion Burn Start",
+                  description: "Begin primary capture burn at Mars.",
+                  relatedBody: "mars"
+                },
+                {
+                  id: "mars-orbit-insertion-burn-end",
+                  type: "orbitInsertionBurnEnd",
+                  epoch: "2026-01-04T00:15:00.000Z",
+                  title: "Orbit Insertion Burn End",
+                  description: "Complete primary capture burn at Mars.",
+                  relatedBody: "mars"
+                }
+              ],
+              metadata: {
+                bodyId: "mars",
+                encounterType: "capture",
+                insertionDeltaVKmPerS: 0.6,
+                periapsisRadiusKm: 4200
+              }
+            },
+            {
+              segmentType: "parkingOrbit",
+              startEpoch: "2026-01-04T00:15:00.000Z",
               endEpoch: "2026-01-04T06:00:00.000Z",
               samples: [
                 {
@@ -149,7 +375,7 @@ it("shows the mission metrics panel after propagation results load", async () =>
                 }
               ],
               initialState: {
-                epoch: "2026-01-04T00:00:00.000Z",
+                epoch: "2026-01-04T00:15:00.000Z",
                 referenceFrame: "mars-centered-inertial",
                 referenceBodyId: "mars",
                 positionKm: [4200, 0, 0],
@@ -162,7 +388,16 @@ it("shows the mission metrics panel after propagation results load", async () =>
                 positionKm: [0, 0, 4200],
                 velocityKmPerSec: [-3.4, 0, 0]
               },
-              events: [],
+              events: [
+                {
+                  id: "mars-capture-established",
+                  type: "captureEstablished",
+                  epoch: "2026-01-04T00:30:00.000Z",
+                  title: "Capture Established",
+                  description: "The spacecraft is now bound to Mars.",
+                  relatedBody: "mars"
+                }
+              ],
               orbitSummary: {
                 isBound: true,
                 periapsisKm: 4200,
@@ -219,58 +454,9 @@ it("shows the mission metrics panel after propagation results load", async () =>
           flightTimeSeconds: 259200,
           warnings: []
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          referenceFrame: "heliocentric-inertial",
-          epoch: "2026-01-01T06:00:00.000Z",
-          ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
-          bodies: [
-            {
-              bodyId: "sun",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [0, 0, 0],
-              velocityKmPerSec: [0, 0, 0],
-              muKm3PerS2: 132712440018,
-              sourceName: "keplerian-elements"
-            },
-            {
-              bodyId: "earth",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [-25500000, 144500000, 0],
-              velocityKmPerSec: [-29.8, -5.2, 0],
-              muKm3PerS2: 398600.435436,
-              sourceName: "jpl-horizons-file"
-            },
-            {
-              bodyId: "mars",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [-159300000, 188100000, 7650000],
-              velocityKmPerSec: [-17.2, -13.2, 0.15],
-              muKm3PerS2: 42828.375816,
-              sourceName: "jpl-horizons-file"
-            }
-          ]
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
-    )
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
@@ -301,13 +487,39 @@ it("shows the mission metrics panel after propagation results load", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
+    )
+    .mockResolvedValueOnce(
+      createJsonResponse({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T06:00:00.000Z",
+          ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "keplerian-elements"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [-25500000, 144500000, 0],
+              velocityKmPerSec: [-29.8, -5.2, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "jpl-horizons-file"
+            },
+            {
+              bodyId: "mars",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [-159300000, 188100000, 7650000],
+              velocityKmPerSec: [-17.2, -13.2, 0.15],
+              muKm3PerS2: 42828.375816,
+              sourceName: "jpl-horizons-file"
+            }
+          ]
+        }),
     );
 
   render(<App />);
@@ -342,9 +554,10 @@ it("shows the mission metrics panel after propagation results load", async () =>
 
 it("renders gravity-assist candidates and switches the active plan", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           ephemerisSource: "bundled-keplerian",
           samples: [
@@ -377,7 +590,7 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
           ],
           segments: [
             {
-              segmentType: "gravityAssistFlyby",
+              segmentType: "flybyEncounter",
               startEpoch: "2026-07-01T00:00:00.000Z",
               endEpoch: "2026-07-02T00:00:00.000Z",
               samples: [],
@@ -395,11 +608,41 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                 positionKm: [778500000, 0, 0],
                 velocityKmPerSec: [0, 6.1, 0]
               },
-              events: [],
+              events: [
+                {
+                  id: "jupiter-soi-entry",
+                  type: "sphereOfInfluenceEntry",
+                  epoch: "2026-07-01T00:00:00.000Z",
+                  title: "Jupiter SOI Entry",
+                  description: "Enter the primary encounter corridor around Jupiter.",
+                  relatedBody: "jupiter"
+                },
+                {
+                  id: "jupiter-flyby-periapsis",
+                  type: "hyperbolicPeriapsis",
+                  epoch: "2026-07-01T12:00:00.000Z",
+                  title: "Jupiter Flyby Periapsis",
+                  description: "Pass periapsis during the Jupiter gravity assist.",
+                  relatedBody: "jupiter"
+                },
+                {
+                  id: "jupiter-soi-exit",
+                  type: "sphereOfInfluenceExit",
+                  epoch: "2026-07-02T00:00:00.000Z",
+                  title: "Jupiter SOI Exit",
+                  description: "Exit the primary encounter corridor after the Jupiter assist.",
+                  relatedBody: "jupiter"
+                }
+              ],
               metadata: {
                 bodyId: "jupiter",
                 periapsisAltitudeKm: 75000,
                 turnAngleDeg: 28,
+                encounterType: "flyby",
+                sphereOfInfluenceRadiusKm: 48200000,
+                periapsisRadiusKm: 146492,
+                incomingVInfinityKmPerS: 6.1,
+                outgoingVInfinityKmPerS: 6.1,
                 inboundVInfinityKmPerS: 6.1,
                 outboundVInfinityKmPerS: 6.1
               }
@@ -458,7 +701,7 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
               ],
               segments: [
                 {
-                  segmentType: "gravityAssistFlyby",
+                  segmentType: "flybyEncounter",
                   startEpoch: "2026-07-01T00:00:00.000Z",
                   endEpoch: "2026-07-02T00:00:00.000Z",
                   samples: [],
@@ -476,11 +719,41 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
                     positionKm: [778500000, 0, 0],
                     velocityKmPerSec: [0, 6.1, 0]
                   },
-                  events: [],
+                  events: [
+                    {
+                      id: "jupiter-soi-entry-alt",
+                      type: "sphereOfInfluenceEntry",
+                      epoch: "2026-07-01T00:00:00.000Z",
+                      title: "Jupiter SOI Entry",
+                      description: "Enter the primary encounter corridor around Jupiter.",
+                      relatedBody: "jupiter"
+                    },
+                    {
+                      id: "jupiter-flyby-periapsis-alt",
+                      type: "hyperbolicPeriapsis",
+                      epoch: "2026-07-01T12:00:00.000Z",
+                      title: "Jupiter Flyby Periapsis",
+                      description: "Pass periapsis during the Jupiter gravity assist.",
+                      relatedBody: "jupiter"
+                    },
+                    {
+                      id: "jupiter-soi-exit-alt",
+                      type: "sphereOfInfluenceExit",
+                      epoch: "2026-07-02T00:00:00.000Z",
+                      title: "Jupiter SOI Exit",
+                      description: "Exit the primary encounter corridor after the Jupiter assist.",
+                      relatedBody: "jupiter"
+                    }
+                  ],
                   metadata: {
                     bodyId: "jupiter",
                     periapsisAltitudeKm: 75000,
                     turnAngleDeg: 28,
+                    encounterType: "flyby",
+                    sphereOfInfluenceRadiusKm: 48200000,
+                    periapsisRadiusKm: 146492,
+                    incomingVInfinityKmPerS: 6.1,
+                    outgoingVInfinityKmPerS: 6.1,
                     inboundVInfinityKmPerS: 6.1,
                     outboundVInfinityKmPerS: 6.1
                   }
@@ -489,17 +762,9 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -530,13 +795,6 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -557,9 +815,30 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
 
 it("plans a multi-planet tour from the unified selector and renders ranked tour candidates", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createLaunchWindowResponse({
+        candidateLaunches: [
+          {
+            launchEpoch: "2026-01-01T00:00:00Z",
+            score: 88.4,
+            deltaVKmPerS: 31.7,
+            flightTimeSeconds: 900 * 86400,
+            visitOrder: ["venus", "jupiter", "saturn"],
+            fullSequenceBodies: ["earth", "venus", "earth", "jupiter", "saturn"],
+          },
+        ],
+        searchSummary: {
+          searchStartEpoch: "2026-01-01T00:00:00Z",
+          searchEndEpoch: "2031-01-01T00:00:00Z",
+          coarseSampleCount: 4,
+          refinedCandidateCount: 1,
+          scoringMode: "tour-delta-v-first",
+        },
+      }),
+    )
+    .mockResolvedValueOnce(
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           ephemerisSource: "bundled-keplerian",
           samples: [
@@ -647,17 +926,9 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -688,13 +959,6 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -704,8 +968,24 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
   await userEvent.click(screen.getByRole("checkbox", { name: "土星" }));
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
-  expect(fetchSpy).toHaveBeenNthCalledWith(
-    1,
+  expect(fetchSpy).toHaveBeenCalledWith(
+    "/missions/launch-window",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({
+        missionType: "tour",
+        departureBody: "earth",
+        requiredVisitBodies: ["venus", "jupiter", "saturn"],
+        earliestLaunchEpoch: "2026-01-01T00:00:00Z",
+        maxAssistBodiesPerLeg: 2,
+        maxReturnedCandidates: 5,
+        allowAssistBodies: true,
+        allowRepeatedFlybys: true,
+      })
+    }),
+  );
+
+  expect(fetchSpy).toHaveBeenCalledWith(
     "/missions/plan-tour",
     expect.objectContaining({
       method: "POST",
@@ -735,9 +1015,10 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
 
 it("shows speed telemetry in the scene and switches components", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -760,17 +1041,9 @@ it("shows speed telemetry in the scene and switches components", async () => {
           flightTimeSeconds: 259200,
           warnings: []
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -801,13 +1074,6 @@ it("shows speed telemetry in the scene and switches components", async () => {
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -821,9 +1087,10 @@ it("shows speed telemetry in the scene and switches components", async () => {
 
 it("renders maneuver markers and highlights active burn windows during playback", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -862,17 +1129,9 @@ it("renders maneuver markers and highlights active burn windows during playback"
           finalMassKg: 1799.4,
           totalPropellantUsedKg: 0.6
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -903,17 +1162,9 @@ it("renders maneuver markers and highlights active burn windows during playback"
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T01:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -944,13 +1195,6 @@ it("renders maneuver markers and highlights active burn windows during playback"
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);

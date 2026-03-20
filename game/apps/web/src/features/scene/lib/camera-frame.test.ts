@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProbeCameraView } from "./camera";
 import { buildProbeCameraFrame } from "./camera-frame";
+import { scaleDistanceKm } from "./scale";
 
 const samplePositionKm: [number, number, number] = [149_597_870.7, 0, 0];
 
@@ -39,10 +40,22 @@ function view(mode: ProbeCameraView["mode"]): ProbeCameraView {
 }
 
 describe("buildProbeCameraFrame", () => {
-  it("builds a cinematic cruise frame with meaningful scene-unit offset", () => {
+  it("anchors far-field probe framing to the linear heliocentric scene scale", () => {
     const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15);
 
-    expect(Math.abs(frame.position[2] - frame.lookAt[2])).toBeGreaterThan(8);
+    expect(frame.lookAt[0]).toBeCloseTo(scaleDistanceKm(samplePositionKm[0]) * 1.8, 5);
+    expect(frame.lookAt[2]).toBeCloseTo(7.2, 5);
+  });
+
+  it("keeps cruise framing close to the probe after realism retuning", () => {
+    const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15);
+    const distance = Math.hypot(
+      frame.position[0] - frame.lookAt[0],
+      frame.position[1] - frame.lookAt[1],
+      frame.position[2] - frame.lookAt[2],
+    );
+
+    expect(distance).toBeLessThan(18);
     expect(frame.position[1]).toBeGreaterThan(frame.lookAt[1]);
     expect(frame.fovDeg).toBe(58);
   });
@@ -55,11 +68,16 @@ describe("buildProbeCameraFrame", () => {
     expect(approach.fovDeg).toBeLessThan(cruise.fovDeg);
   });
 
-  it("adds a lateral orbiting offset during flyby emphasis", () => {
+  it("allows only bounded retreat for flyby emphasis", () => {
     const frame = buildProbeCameraFrame(samplePositionKm, view("flyby-emphasis"), 1.15);
+    const distance = Math.hypot(
+      frame.position[0] - frame.lookAt[0],
+      frame.position[1] - frame.lookAt[1],
+      frame.position[2] - frame.lookAt[2],
+    );
 
     expect(Math.abs(frame.position[0] - frame.lookAt[0])).toBeGreaterThan(3);
-    expect(Math.abs(frame.position[2] - frame.lookAt[2])).toBeGreaterThan(4);
+    expect(distance).toBeLessThan(13.5);
   });
 
   it("rotates the cruise camera around the probe when yaw changes", () => {

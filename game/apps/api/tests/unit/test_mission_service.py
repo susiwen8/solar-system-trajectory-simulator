@@ -133,7 +133,10 @@ def test_mission_service_builds_staged_departure_segments(bundled_ephemeris) -> 
         "launchParkingOrbit",
         "earthEscape",
     ]
-    assert "arrivalCapture" in [segment["segmentType"] for segment in result.segments]
+    segment_types = [segment["segmentType"] for segment in result.segments]
+    assert "arrivalHyperbolicApproach" in segment_types
+    assert "orbitInsertionBurn" in segment_types
+    assert "parkingOrbit" in segment_types
 
 
 def test_phase_a_timeline_includes_parking_orbit_and_earth_escape(bundled_ephemeris) -> None:
@@ -166,13 +169,17 @@ def test_mission_service_builds_cruise_segment_metadata_for_auto_transfer(bundle
     result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
 
     cruise_segment = next(segment for segment in result.segments if segment["segmentType"] == "heliocentricCruise")
-    arrival_capture_segment = next(segment for segment in result.segments if segment["segmentType"] == "arrivalCapture")
+    arrival_approach_segment = next(segment for segment in result.segments if segment["segmentType"] == "arrivalHyperbolicApproach")
+    insertion_burn_segment = next(segment for segment in result.segments if segment["segmentType"] == "orbitInsertionBurn")
+    parking_orbit_segment = next(segment for segment in result.segments if segment["segmentType"] == "parkingOrbit")
     assert cruise_segment["metadata"]["targetBody"] == "mars"
     assert "maneuverCount" in cruise_segment["metadata"]
     assert "massSummary" in cruise_segment
-    assert arrival_capture_segment["orbitSummary"]["isBound"] is True
-    assert arrival_capture_segment["samples"]
-    assert arrival_capture_segment["initialState"]["referenceBodyId"] == "mars"
+    assert arrival_approach_segment["initialState"]["referenceBodyId"] == "mars"
+    assert any(event["type"] == "hyperbolicPeriapsis" for event in arrival_approach_segment["events"])
+    assert any(event["type"] == "orbitInsertionBurnStart" for event in insertion_burn_segment["events"])
+    assert parking_orbit_segment["orbitSummary"]["isBound"] is True
+    assert parking_orbit_segment["samples"]
 
 
 def test_mission_service_keeps_cruise_mass_summary_in_sync_with_propulsion_outputs(bundled_ephemeris) -> None:
