@@ -1,8 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceCameraMotion, advanceProbeMotion } from "./camera-motion";
+import {
+  advanceCameraMotion,
+  advanceProbeMotion,
+  interpolateCameraMotion,
+  interpolateProbeMotion,
+} from "./camera-motion";
 
 describe("advanceCameraMotion", () => {
+  it("interpolates camera motion across a playback step", () => {
+    const next = interpolateCameraMotion(
+      {
+        position: [0, 0, 0],
+        lookAt: [0, 0, 10],
+        fovDeg: 58,
+        zoom: 1,
+      },
+      {
+        position: [10, 4, 2],
+        lookAt: [16, 5, 8],
+        fovDeg: 42,
+        zoom: 1.3,
+      },
+      0.5,
+    );
+
+    expect(next).toEqual({
+      position: [5, 2, 1],
+      lookAt: [8, 2.5, 9],
+      fovDeg: 50,
+      zoom: 1.15,
+    });
+  });
+
   it("moves the current camera state toward the target state", () => {
     const next = advanceCameraMotion(
       {
@@ -53,6 +83,31 @@ describe("advanceCameraMotion", () => {
 });
 
 describe("advanceProbeMotion", () => {
+  it("interpolates probe motion across a playback step and keeps the forward vector normalized", () => {
+    const next = interpolateProbeMotion(
+      {
+        position: [0, 0, 0],
+        forward: [1, 0, 0],
+        engineGlowIntensity: 0.72,
+        streakOpacity: 0.18,
+      },
+      {
+        position: [10, 4, 2],
+        forward: [0, 0, 1],
+        engineGlowIntensity: 1.15,
+        streakOpacity: 0.34,
+      },
+      0.5,
+    );
+
+    expect(next.position).toEqual([5, 2, 1]);
+    expect(next.forward[0]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(next.forward[2]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(Math.hypot(...next.forward)).toBeCloseTo(1, 6);
+    expect(next.engineGlowIntensity).toBeCloseTo(0.935, 6);
+    expect(next.streakOpacity).toBeCloseTo(0.26, 6);
+  });
+
   it("moves the probe transform toward the target state and keeps the forward vector normalized", () => {
     const next = advanceProbeMotion(
       {

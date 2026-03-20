@@ -12,17 +12,26 @@ export type ProbeMotionState = {
   streakOpacity: number;
 };
 
+export function interpolateCameraMotion(
+  current: CameraMotionState,
+  target: CameraMotionState,
+  alpha: number,
+): CameraMotionState {
+  const t = clampAlpha(alpha);
+  return {
+    position: lerpVec3(current.position, target.position, t),
+    lookAt: lerpVec3(current.lookAt, target.lookAt, t),
+    fovDeg: lerpScalar(current.fovDeg, target.fovDeg, t),
+    zoom: lerpScalar(current.zoom, target.zoom, t),
+  };
+}
+
 export function advanceCameraMotion(
   current: CameraMotionState,
   target: CameraMotionState,
   smoothing: number,
 ): CameraMotionState {
-  const next: CameraMotionState = {
-    position: lerpVec3(current.position, target.position, smoothing),
-    lookAt: lerpVec3(current.lookAt, target.lookAt, smoothing),
-    fovDeg: lerpScalar(current.fovDeg, target.fovDeg, smoothing),
-    zoom: lerpScalar(current.zoom, target.zoom, smoothing),
-  };
+  const next = interpolateCameraMotion(current, target, smoothing);
 
   if (isCloseVec3(next.position, target.position) && isCloseVec3(next.lookAt, target.lookAt) && Math.abs(next.fovDeg - target.fovDeg) < 0.001 && Math.abs(next.zoom - target.zoom) < 0.001) {
     return target;
@@ -31,17 +40,26 @@ export function advanceCameraMotion(
   return next;
 }
 
+export function interpolateProbeMotion(
+  current: ProbeMotionState,
+  target: ProbeMotionState,
+  alpha: number,
+): ProbeMotionState {
+  const t = clampAlpha(alpha);
+  return {
+    position: lerpVec3(current.position, target.position, t),
+    forward: normalizeVec3(lerpVec3(current.forward, target.forward, t)),
+    engineGlowIntensity: lerpScalar(current.engineGlowIntensity, target.engineGlowIntensity, t),
+    streakOpacity: lerpScalar(current.streakOpacity, target.streakOpacity, t),
+  };
+}
+
 export function advanceProbeMotion(
   current: ProbeMotionState,
   target: ProbeMotionState,
   smoothing: number,
 ): ProbeMotionState {
-  const next: ProbeMotionState = {
-    position: lerpVec3(current.position, target.position, smoothing),
-    forward: normalizeVec3(lerpVec3(current.forward, target.forward, smoothing)),
-    engineGlowIntensity: lerpScalar(current.engineGlowIntensity, target.engineGlowIntensity, smoothing),
-    streakOpacity: lerpScalar(current.streakOpacity, target.streakOpacity, smoothing),
-  };
+  const next = interpolateProbeMotion(current, target, smoothing);
 
   if (
     isCloseVec3(next.position, target.position) &&
@@ -55,8 +73,30 @@ export function advanceProbeMotion(
   return next;
 }
 
+export function isCameraMotionClose(left: CameraMotionState, right: CameraMotionState) {
+  return (
+    isCloseVec3(left.position, right.position) &&
+    isCloseVec3(left.lookAt, right.lookAt) &&
+    Math.abs(left.fovDeg - right.fovDeg) < 0.001 &&
+    Math.abs(left.zoom - right.zoom) < 0.001
+  );
+}
+
+export function isProbeMotionClose(left: ProbeMotionState, right: ProbeMotionState) {
+  return (
+    isCloseVec3(left.position, right.position) &&
+    isCloseVec3(left.forward, right.forward) &&
+    Math.abs(left.engineGlowIntensity - right.engineGlowIntensity) < 0.001 &&
+    Math.abs(left.streakOpacity - right.streakOpacity) < 0.001
+  );
+}
+
 function lerpScalar(current: number, target: number, smoothing: number) {
   return current + (target - current) * smoothing;
+}
+
+function clampAlpha(alpha: number) {
+  return Math.min(Math.max(alpha, 0), 1);
 }
 
 function lerpVec3(

@@ -21,7 +21,7 @@ export function buildEmptyPreviewOrbitGuide(
     radiusX,
     radiusY,
     eccentricity,
-    opacity: isInnerBody ? 0.28 : 0.16,
+    opacity: isInnerBody ? 0.42 : 0.26,
     lineWidthScale: isInnerBody ? 1 : 1.45,
   };
 }

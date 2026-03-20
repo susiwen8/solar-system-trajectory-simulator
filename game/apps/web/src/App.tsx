@@ -15,6 +15,8 @@ import SolarSystemScene from "./features/scene/components/SolarSystemScene";
 import { fetchEphemerisBodies, fetchLaunchWindow, planMissionTour, propagateMission } from "./lib/api";
 import { planetLabel, t, type Language } from "./lib/i18n";
 
+const EMPTY_PREVIEW_EPOCH = "2026-01-01T00:00:00Z";
+
 export default function App() {
   const [language, setLanguage] = useState<Language>("zh");
   const [result, setResult] = useState<TrajectoryResult | null>(null);
@@ -35,14 +37,11 @@ export default function App() {
     activeResult && launchEpoch
       ? epochFromOffset(launchEpoch, activeResult.samples[selectedSampleIndex]?.epochSeconds ?? 0)
       : null;
+  const ephemerisEpoch = currentEpoch ?? EMPTY_PREVIEW_EPOCH;
 
   useEffect(() => {
-    if (!currentEpoch) {
-      return;
-    }
-
     let cancelled = false;
-    const cached = ephemerisCacheRef.current[currentEpoch];
+    const cached = ephemerisCacheRef.current[ephemerisEpoch];
     if (cached) {
       setBodies(cached.bodies);
       setEphemerisSource(cached.ephemerisSource);
@@ -51,10 +50,10 @@ export default function App() {
       };
     }
 
-    void fetchEphemerisBodies(currentEpoch)
+    void fetchEphemerisBodies(ephemerisEpoch)
       .then((ephemeris) => {
         if (!cancelled) {
-          ephemerisCacheRef.current[currentEpoch] = {
+          ephemerisCacheRef.current[ephemerisEpoch] = {
             bodies: ephemeris.bodies,
             ephemerisSource: ephemeris.ephemerisSource,
           };
@@ -71,7 +70,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [currentEpoch]);
+  }, [ephemerisEpoch, copy.ephemerisRequestFailed]);
 
   useEffect(() => {
     if (!isPlaying || !activeResult) {

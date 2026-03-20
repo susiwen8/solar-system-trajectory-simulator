@@ -14,12 +14,13 @@ type EmptyPreviewDragDelta = {
   deltaY: number;
 };
 
-const DEFAULT_PITCH_RAD = -0.68;
-const DEFAULT_RADIUS_SCALE = 1.22;
-const MIN_PITCH_RAD = -1.25;
-const MAX_PITCH_RAD = 0.18;
-const MIN_RADIUS_SCALE = 0.82;
-const MAX_RADIUS_SCALE = 1.92;
+const DEFAULT_YAW_RAD = 0.92;
+const DEFAULT_PITCH_RAD = 1.42;
+const DEFAULT_RADIUS_SCALE = 0.96;
+const MIN_PITCH_RAD = 0.95;
+const MAX_PITCH_RAD = 1.56;
+const MIN_RADIUS_SCALE = 0.74;
+const MAX_RADIUS_SCALE = 1.5;
 const DRAG_YAW_SENSITIVITY = 0.0072;
 const DRAG_PITCH_SENSITIVITY = 0.0058;
 const WHEEL_ZOOM_SENSITIVITY = 0.0011;
@@ -28,7 +29,7 @@ const CAMERA_SMOOTHING_PER_SECOND = 7.5;
 
 export function createDefaultEmptyPreviewCameraState(): EmptyPreviewCameraState {
   return {
-    yawRad: 0,
+    yawRad: DEFAULT_YAW_RAD,
     pitchRad: DEFAULT_PITCH_RAD,
     radiusScale: DEFAULT_RADIUS_SCALE,
   };

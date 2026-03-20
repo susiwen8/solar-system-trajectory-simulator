@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 
 import App from "./App";
 
+const EMPTY_PREVIEW_EPOCH = "2026-01-01T00:00:00Z";
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -11,9 +13,59 @@ function hasExactTextContent(text: string) {
   return (_content: string, node: Element | null) => node?.textContent === text;
 }
 
+function createJsonResponse(body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+function createEphemerisResponse(
+  overrides: {
+    epoch?: string;
+    ephemerisSource?: string;
+    bodies?: Array<Record<string, unknown>>;
+  } = {},
+) {
+  const epoch = overrides.epoch ?? EMPTY_PREVIEW_EPOCH;
+  return createJsonResponse({
+    referenceFrame: "heliocentric-inertial",
+    epoch,
+    ephemerisSource: overrides.ephemerisSource ?? "mixed",
+    bodies:
+      overrides.bodies ?? [
+        {
+          bodyId: "sun",
+          epoch,
+          positionKm: [0, 0, 0],
+          velocityKmPerSec: [0, 0, 0],
+          muKm3PerS2: 132712440018,
+          sourceName: "keplerian-elements",
+        },
+        {
+          bodyId: "earth",
+          epoch,
+          positionKm: [-24856124, 144936962, 0],
+          velocityKmPerSec: [-29.837, -5.127, 0],
+          muKm3PerS2: 398600.435436,
+          sourceName: "jpl-horizons-file",
+        },
+        {
+          bodyId: "mars",
+          epoch,
+          positionKm: [-159185432, 188245763, 7650983],
+          velocityKmPerSec: [-17.235, -13.254, 0.156],
+          muKm3PerS2: 42828.375816,
+          sourceName: "jpl-horizons-file",
+        },
+      ],
+  });
+}
+
 function createLaunchWindowResponse(overrides: Partial<Record<string, unknown>> = {}) {
-  return new Response(
-    JSON.stringify({
+  return createJsonResponse({
       recommendedLaunchEpoch: "2026-01-01T00:00:00Z",
       windowStartEpoch: "2025-12-15T00:00:00Z",
       windowEndEpoch: "2026-01-15T00:00:00Z",
@@ -34,14 +86,7 @@ function createLaunchWindowResponse(overrides: Partial<Record<string, unknown>> 
       },
       warnings: [],
       ...overrides,
-    }),
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  );
+    });
 }
 
 it("renders the simulator heading", () => {
@@ -65,19 +110,43 @@ it("switches visible interface copy to English", async () => {
 });
 
 it("shows the orbit preview in the empty scene instead of the old placeholder copy", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    createEphemerisResponse({
+      bodies: [
+        {
+          bodyId: "sun",
+          epoch: EMPTY_PREVIEW_EPOCH,
+          positionKm: [0, 0, 0],
+          velocityKmPerSec: [0, 0, 0],
+          muKm3PerS2: 132712440018,
+          sourceName: "keplerian-elements",
+        },
+        {
+          bodyId: "earth",
+          epoch: EMPTY_PREVIEW_EPOCH,
+          positionKm: [-24856124, 144936962, 0],
+          velocityKmPerSec: [-29.837, -5.127, 0],
+          muKm3PerS2: 398600.435436,
+          sourceName: "jpl-horizons-file",
+        },
+      ],
+    }),
+  );
+
   render(<App />);
 
   expect(await screen.findByTestId("empty-orbit-preview")).toBeInTheDocument();
   expect(screen.queryByText("运行任务后即可描绘轨迹")).not.toBeInTheDocument();
+  expect(fetchSpy).toHaveBeenCalledWith("/ephemeris/bodies?epoch=2026-01-01T00%3A00%3A00Z");
 });
 
 it("shows the mission metrics panel after propagation results load", async () => {
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -385,58 +454,9 @@ it("shows the mission metrics panel after propagation results load", async () =>
           flightTimeSeconds: 259200,
           warnings: []
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          referenceFrame: "heliocentric-inertial",
-          epoch: "2026-01-01T06:00:00.000Z",
-          ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
-          bodies: [
-            {
-              bodyId: "sun",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [0, 0, 0],
-              velocityKmPerSec: [0, 0, 0],
-              muKm3PerS2: 132712440018,
-              sourceName: "keplerian-elements"
-            },
-            {
-              bodyId: "earth",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [-25500000, 144500000, 0],
-              velocityKmPerSec: [-29.8, -5.2, 0],
-              muKm3PerS2: 398600.435436,
-              sourceName: "jpl-horizons-file"
-            },
-            {
-              bodyId: "mars",
-              epoch: "2026-01-01T06:00:00.000Z",
-              positionKm: [-159300000, 188100000, 7650000],
-              velocityKmPerSec: [-17.2, -13.2, 0.15],
-              muKm3PerS2: 42828.375816,
-              sourceName: "jpl-horizons-file"
-            }
-          ]
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
-    )
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
@@ -467,13 +487,39 @@ it("shows the mission metrics panel after propagation results load", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
+    )
+    .mockResolvedValueOnce(
+      createJsonResponse({
+          referenceFrame: "heliocentric-inertial",
+          epoch: "2026-01-01T06:00:00.000Z",
+          ephemerisSource: "jpl-horizons-file+fallback:bundled-keplerian",
+          bodies: [
+            {
+              bodyId: "sun",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [0, 0, 0],
+              velocityKmPerSec: [0, 0, 0],
+              muKm3PerS2: 132712440018,
+              sourceName: "keplerian-elements"
+            },
+            {
+              bodyId: "earth",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [-25500000, 144500000, 0],
+              velocityKmPerSec: [-29.8, -5.2, 0],
+              muKm3PerS2: 398600.435436,
+              sourceName: "jpl-horizons-file"
+            },
+            {
+              bodyId: "mars",
+              epoch: "2026-01-01T06:00:00.000Z",
+              positionKm: [-159300000, 188100000, 7650000],
+              velocityKmPerSec: [-17.2, -13.2, 0.15],
+              muKm3PerS2: 42828.375816,
+              sourceName: "jpl-horizons-file"
+            }
+          ]
+        }),
     );
 
   render(<App />);
@@ -508,10 +554,10 @@ it("shows the mission metrics panel after propagation results load", async () =>
 
 it("renders gravity-assist candidates and switches the active plan", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           ephemerisSource: "bundled-keplerian",
           samples: [
@@ -716,17 +762,9 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -757,13 +795,6 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -784,6 +815,7 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
 
 it("plans a multi-planet tour from the unified selector and renders ranked tour candidates", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(
       createLaunchWindowResponse({
         candidateLaunches: [
@@ -806,8 +838,7 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
       }),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           ephemerisSource: "bundled-keplerian",
           samples: [
@@ -895,17 +926,9 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -936,13 +959,6 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -952,8 +968,7 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
   await userEvent.click(screen.getByRole("checkbox", { name: "土星" }));
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
-  expect(fetchSpy).toHaveBeenNthCalledWith(
-    1,
+  expect(fetchSpy).toHaveBeenCalledWith(
     "/missions/launch-window",
     expect.objectContaining({
       method: "POST",
@@ -970,8 +985,7 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
     }),
   );
 
-  expect(fetchSpy).toHaveBeenNthCalledWith(
-    2,
+  expect(fetchSpy).toHaveBeenCalledWith(
     "/missions/plan-tour",
     expect.objectContaining({
       method: "POST",
@@ -1001,10 +1015,10 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
 
 it("shows speed telemetry in the scene and switches components", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -1027,17 +1041,9 @@ it("shows speed telemetry in the scene and switches components", async () => {
           flightTimeSeconds: 259200,
           warnings: []
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -1068,13 +1074,6 @@ it("shows speed telemetry in the scene and switches components", async () => {
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);
@@ -1088,10 +1087,10 @@ it("shows speed telemetry in the scene and switches components", async () => {
 
 it("renders maneuver markers and highlights active burn windows during playback", async () => {
   vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
     .mockResolvedValueOnce(createLaunchWindowResponse())
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           samples: [
             {
@@ -1130,17 +1129,9 @@ it("renders maneuver markers and highlights active burn windows during playback"
           finalMassKg: 1799.4,
           totalPropellantUsedKg: 0.6
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T00:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -1171,17 +1162,9 @@ it("renders maneuver markers and highlights active burn windows during playback"
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     )
     .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
+      createJsonResponse({
           referenceFrame: "heliocentric-inertial",
           epoch: "2026-01-01T01:00:00.000Z",
           ephemerisSource: "bundled-keplerian",
@@ -1212,13 +1195,6 @@ it("renders maneuver markers and highlights active burn windows during playback"
             }
           ]
         }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json"
-          }
-        },
-      ),
     );
 
   render(<App />);

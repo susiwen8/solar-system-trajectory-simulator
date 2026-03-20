@@ -1,11 +1,11 @@
 import type { ScenePoint, TrajectorySample } from "../../mission/types";
-import { compressSceneDistanceKm } from "./scale";
+import { scaleDistanceKm } from "./scale";
 
 export function toScenePoints(samples: TrajectorySample[]): ScenePoint[] {
   return samples.map((sample) => ({
-    x: compressSceneDistanceKm(sample.positionKm[0]),
-    y: compressSceneDistanceKm(sample.positionKm[1]),
-    z: compressSceneDistanceKm(sample.positionKm[2])
+    x: scaleDistanceKm(sample.positionKm[0]),
+    y: scaleDistanceKm(sample.positionKm[1]),
+    z: scaleDistanceKm(sample.positionKm[2])
   }));
 }
 

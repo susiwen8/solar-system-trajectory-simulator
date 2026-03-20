@@ -18,15 +18,15 @@ describe("BODY_PHYSICAL_RADII_KM", () => {
 });
 
 describe("sceneBodyRadiusFromPhysicalKm", () => {
-  it("maps real radii into stable scene radii without reordering bodies", () => {
-    expect(sceneBodyRadiusFromPhysicalKm(BODY_PHYSICAL_RADII_KM.jupiter)).toBeGreaterThan(
-      sceneBodyRadiusFromPhysicalKm(BODY_PHYSICAL_RADII_KM.earth),
-    );
+  it("keeps planets readable without overpowering the probe", () => {
+    expect(sceneBodyRadiusFromPhysicalKm(BODY_PHYSICAL_RADII_KM.earth)).toBe(2.8);
+    expect(sceneBodyRadiusFromPhysicalKm(BODY_PHYSICAL_RADII_KM.jupiter)).toBe(5.1);
+    expect(sceneBodyRadiusFromPhysicalKm(BODY_PHYSICAL_RADII_KM.sun)).toBe(7.8);
   });
 });
 
 describe("PROBE_PHYSICAL_BASELINE_METERS", () => {
-  it("keeps the probe tiny next to planets", () => {
+  it("keeps the realism metadata available for reference", () => {
     expect(PROBE_PHYSICAL_BASELINE_METERS.busDiameter).toBeLessThan(5);
     expect(PROBE_PHYSICAL_BASELINE_METERS.spanWidth).toBeLessThan(25);
   });

@@ -1,6 +1,6 @@
 import type { ProbeCameraView } from "./camera";
 import type { OrbitCameraState } from "./orbit-camera";
-import { compressSceneDistanceKm } from "./scale";
+import { scaleDistanceKm } from "./scale";
 
 export type ProbeCameraFrame = {
   position: [number, number, number];
@@ -105,9 +105,9 @@ function cinematicOffsets(mode: ProbeCameraView["mode"]) {
 
 function toSceneVector(positionKm: [number, number, number]): [number, number, number] {
   return [
-    compressSceneDistanceKm(positionKm[0]) * 1.8,
-    compressSceneDistanceKm(positionKm[2]) * 0.8,
-    compressSceneDistanceKm(positionKm[1]) * 1.8,
+    scaleDistanceKm(positionKm[0]) * 1.8,
+    scaleDistanceKm(positionKm[2]) * 0.8,
+    scaleDistanceKm(positionKm[1]) * 1.8,
   ];
 }
 

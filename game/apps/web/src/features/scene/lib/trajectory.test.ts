@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TrajectorySample } from "../../mission/types";
+import { scaleDistanceKm } from "./scale";
 import { interpolateTrajectorySample, toScenePoints } from "./trajectory";
 
 describe("trajectory helpers", () => {
@@ -14,6 +15,22 @@ describe("trajectory helpers", () => {
     ]);
 
     expect(points).toEqual([{ x: 0.1, y: 0.2, z: 0.3 }]);
+  });
+
+  it("keeps far-field heliocentric trajectory samples on the linear scene scale", () => {
+    const sample: TrajectorySample = {
+      epochSeconds: 0,
+      positionKm: [149_597_870.7, -78_340_000, 12_500_000],
+      velocityKmPerSec: [0, 0, 0],
+    };
+
+    const [point] = toScenePoints([sample]);
+
+    expect(point).toEqual({
+      x: scaleDistanceKm(sample.positionKm[0]),
+      y: scaleDistanceKm(sample.positionKm[1]),
+      z: scaleDistanceKm(sample.positionKm[2]),
+    });
   });
 
   it("interpolates between neighboring trajectory samples", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProbeCameraView } from "./camera";
 import { buildProbeCameraFrame } from "./camera-frame";
+import { scaleDistanceKm } from "./scale";
 
 const samplePositionKm: [number, number, number] = [149_597_870.7, 0, 0];
 
@@ -39,6 +40,13 @@ function view(mode: ProbeCameraView["mode"]): ProbeCameraView {
 }
 
 describe("buildProbeCameraFrame", () => {
+  it("anchors far-field probe framing to the linear heliocentric scene scale", () => {
+    const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15);
+
+    expect(frame.lookAt[0]).toBeCloseTo(scaleDistanceKm(samplePositionKm[0]) * 1.8, 5);
+    expect(frame.lookAt[2]).toBeCloseTo(7.2, 5);
+  });
+
   it("keeps cruise framing close to the probe after realism retuning", () => {
     const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15);
     const distance = Math.hypot(

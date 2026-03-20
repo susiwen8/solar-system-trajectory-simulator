@@ -17,13 +17,12 @@ describe("rotateProbeModelAxis", () => {
 });
 
 describe("probe visual scale", () => {
-  it("keeps the probe clearly smaller than emphasized planets", () => {
-    expect(PROBE_VISUAL_SCALE).toBeLessThan(0.1);
-    expect(PROBE_VISUAL_SCALE).toBeGreaterThan(0.02);
+  it("restores the readable pre-realism probe scale", () => {
+    expect(PROBE_VISUAL_SCALE).toBe(0.34);
   });
 
-  it("keeps thrust effects slightly larger than the compressed probe body", () => {
+  it("restores the matching pre-realism effects scale", () => {
+    expect(PROBE_EFFECTS_SCALE).toBe(0.44);
     expect(PROBE_EFFECTS_SCALE).toBeGreaterThan(PROBE_VISUAL_SCALE);
-    expect(PROBE_EFFECTS_SCALE).toBeLessThan(0.2);
   });
 });

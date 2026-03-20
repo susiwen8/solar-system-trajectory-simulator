@@ -50,10 +50,18 @@ const bodyColors: Record<string, string> = {
   neptune: "#6f93ff",
 };
 
+const EMPTY_PREVIEW_DISTANCE_BASE = 1.44;
+const EMPTY_PREVIEW_HEIGHT_BIAS = 0.015;
+const EMPTY_PREVIEW_HEIGHT_BASE = 0.45;
+const EMPTY_PREVIEW_SIZE_SCALE = 0.9;
+const EMPTY_PREVIEW_BASE_FAR = 1800;
+const EMPTY_PREVIEW_BASE_FOG_DENSITY = 0.0007;
+
 export default function EmptySolarPreview({ bodies, language }: EmptySolarPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<PreviewRuntime | null>(null);
+  const bodiesRef = useRef(bodies);
   const cameraRigRef = useRef<EmptyPreviewCameraRig>(createDefaultEmptyPreviewCameraRig());
   const pointerGestureRef = useRef<PointerGesture | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
@@ -84,7 +92,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
       lastFrameTimeRef.current = time;
       cameraRigRef.current = advanceEmptyPreviewAmbientTarget(cameraRigRef.current, deltaSeconds);
       cameraRigRef.current = stepEmptyPreviewCameraRig(cameraRigRef.current, deltaSeconds);
-      updatePreviewCamera(runtime.camera, cameraRigRef.current.rendered, bodies);
+      updatePreviewCamera(runtime.camera, cameraRigRef.current.rendered, bodiesRef.current);
       runtime.renderer.render(runtime.scene, runtime.camera);
       runtime.frameHandle = window.requestAnimationFrame(animate);
     };
@@ -101,6 +109,7 @@ export default function EmptySolarPreview({ bodies, language }: EmptySolarPrevie
   }, []);
 
   useEffect(() => {
+    bodiesRef.current = bodies;
     const runtime = runtimeRef.current;
     if (!runtime) {
       return;
@@ -184,12 +193,12 @@ function createPreviewRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(surface.clientWidth || 1, surface.clientHeight || 1, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
+    renderer.toneMappingExposure = 1.18;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(44, resolveAspect(surface), 0.1, 400);
+    const camera = new THREE.PerspectiveCamera(44, resolveAspect(surface), 0.1, EMPTY_PREVIEW_BASE_FAR);
 
-    scene.fog = new THREE.FogExp2("#07111e", 0.0042);
+    scene.fog = new THREE.FogExp2("#07111e", EMPTY_PREVIEW_BASE_FOG_DENSITY);
     scene.add(new THREE.AmbientLight("#9eb7de", 1.05));
 
     const fillLight = new THREE.DirectionalLight("#7aa8ff", 0.68);
@@ -247,17 +256,23 @@ function syncPreviewBodies(runtime: PreviewRuntime, bodies: BodyState[]) {
     const visualProfile = resolveBodyVisualProfile(body.bodyId);
     const radius = sceneBodyRadiusFromPhysicalKm(
       BODY_PHYSICAL_RADII_KM[body.bodyId as keyof typeof BODY_PHYSICAL_RADII_KM] ?? 3000,
-    ) * visualProfile.radiusMultiplier;
+    ) * visualProfile.radiusMultiplier * EMPTY_PREVIEW_SIZE_SCALE;
 
-    const material = new THREE.MeshStandardMaterial({
-      color: bodyColors[body.bodyId] ?? "#eef4fb",
-      emissive: visualProfile.emissive,
-      emissiveIntensity: visualProfile.emissiveIntensity,
-      roughness: visualProfile.roughness,
-      metalness: visualProfile.metalness,
-      transparent: visualProfile.opacity < 1,
-      opacity: visualProfile.opacity,
-    });
+    const material = body.bodyId === "sun"
+      ? new THREE.MeshBasicMaterial({
+          color: bodyColors[body.bodyId] ?? "#eef4fb",
+          transparent: visualProfile.opacity < 1,
+          opacity: visualProfile.opacity,
+        })
+      : new THREE.MeshStandardMaterial({
+          color: bodyColors[body.bodyId] ?? "#eef4fb",
+          emissive: visualProfile.emissive,
+          emissiveIntensity: visualProfile.emissiveIntensity,
+          roughness: visualProfile.roughness,
+          metalness: visualProfile.metalness,
+          transparent: visualProfile.opacity < 1,
+          opacity: visualProfile.opacity,
+        });
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(radius, 28, 20),
       material,
@@ -280,22 +295,23 @@ function updatePreviewCamera(
   bodies: BodyState[],
 ) {
   const visibleBodies = bodies.length ? bodies : buildFallbackBodies();
-  const maxDistance = Math.max(
-    ...visibleBodies.map((body) => bodyToScenePosition(body).length()),
-    14,
-  );
-  const distance = maxDistance * (1.45 + state.radiusScale);
+  const focusPoint = resolvePreviewFocusPoint(visibleBodies);
+  const referenceBodies = resolvePreviewReferenceBodies(visibleBodies, focusPoint);
+  const maxDistance = resolvePreviewOverviewDistance(referenceBodies, focusPoint);
+  const distance = maxDistance * (EMPTY_PREVIEW_DISTANCE_BASE + state.radiusScale);
   const cosPitch = Math.cos(state.pitchRad);
   const sinPitch = Math.sin(state.pitchRad);
   const cosYaw = Math.cos(state.yawRad);
   const sinYaw = Math.sin(state.yawRad);
 
   camera.position.set(
-    distance * cosPitch * sinYaw,
-    distance * Math.abs(sinPitch) + maxDistance * 0.42 + 10,
-    distance * cosPitch * cosYaw,
+    focusPoint.x + distance * cosPitch * sinYaw,
+    focusPoint.y + distance * sinPitch + maxDistance * EMPTY_PREVIEW_HEIGHT_BIAS + EMPTY_PREVIEW_HEIGHT_BASE,
+    focusPoint.z + distance * cosPitch * cosYaw,
   );
-  camera.lookAt(0, 0, 0);
+  camera.far = resolvePreviewCameraFar(maxDistance);
+  camera.updateProjectionMatrix();
+  camera.lookAt(focusPoint);
 }
 
 function createOrbitGuide(bodyId: string, position: THREE.Vector3) {
@@ -321,7 +337,7 @@ function createSunGlow(radius: number) {
     new THREE.MeshBasicMaterial({
       color: "#ffcc72",
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.1,
     }),
   );
   return glow;
@@ -351,12 +367,46 @@ function buildFallbackBodies(): BodyState[] {
 const INNER_BODY_IDS = new Set(["mercury", "venus", "earth", "mars"]);
 const OUTER_BODY_IDS = new Set(["jupiter", "saturn", "uranus", "neptune"]);
 
+export function resolvePreviewFocusPoint(_bodies: BodyState[]) {
+  return new THREE.Vector3(0, 0, 0);
+}
+
+export function resolvePreviewReferenceBodies(bodies: BodyState[], _focusPoint: THREE.Vector3) {
+  const planetaryBodies = bodies.filter((body) => body.bodyId !== "sun");
+  if (planetaryBodies.length === 0) {
+    return bodies;
+  }
+
+  return planetaryBodies;
+}
+
+export function resolvePreviewOverviewDistance(bodies: BodyState[], focusPoint: THREE.Vector3) {
+  const distances = bodies
+    .map((body) => bodyToScenePosition(body).distanceTo(focusPoint))
+    .filter((distance) => Number.isFinite(distance))
+    .sort((left, right) => left - right);
+
+  if (distances.length === 0) {
+    return 18;
+  }
+
+  const percentileIndex = Math.min(
+    distances.length - 1,
+    Math.max(0, Math.floor((distances.length - 1) * 0.85)),
+  );
+  return Math.max(distances[percentileIndex] ?? 18, 18);
+}
+
+export function resolvePreviewCameraFar(overviewDistance: number) {
+  return Math.max(EMPTY_PREVIEW_BASE_FAR, overviewDistance * 6);
+}
+
 function resolveBodyVisualProfile(bodyId: string) {
   if (bodyId === "sun") {
     return {
-      radiusMultiplier: 1.14,
+      radiusMultiplier: 0.62,
       emissive: "#f4b400",
-      emissiveIntensity: 1.45,
+      emissiveIntensity: 1.1,
       roughness: 0.34,
       metalness: 0.02,
       opacity: 1,
@@ -365,9 +415,9 @@ function resolveBodyVisualProfile(bodyId: string) {
 
   if (INNER_BODY_IDS.has(bodyId)) {
     return {
-      radiusMultiplier: 1,
+      radiusMultiplier: 0.95,
       emissive: "#0f141c",
-      emissiveIntensity: 0.06,
+      emissiveIntensity: 0.18,
       roughness: 0.6,
       metalness: 0.08,
       opacity: 0.98,
@@ -376,9 +426,9 @@ function resolveBodyVisualProfile(bodyId: string) {
 
   if (OUTER_BODY_IDS.has(bodyId)) {
     return {
-      radiusMultiplier: 1.07,
+      radiusMultiplier: 0.88,
       emissive: "#0b1016",
-      emissiveIntensity: 0.04,
+      emissiveIntensity: 0.12,
       roughness: 0.76,
       metalness: 0.04,
       opacity: 0.9,
