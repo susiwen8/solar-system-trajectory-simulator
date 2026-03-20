@@ -1,5 +1,4 @@
-import { createApiUrl } from "./api";
-import { propagateMission } from "./api";
+import { createApiUrl, fetchLaunchWindow, propagateMission } from "./api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -65,4 +64,40 @@ it("parses maneuver events and propulsion metrics from mission results", async (
   expect(result.maneuverEvents?.[0].type).toBe("TCM");
   expect(result.finalMassKg).toBeGreaterThan(0);
   expect(result.totalPropellantUsedKg).toBeGreaterThan(0);
+});
+
+it("fetches launch window recommendations", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        recommendedLaunchEpoch: "2026-10-12T00:00:00Z",
+        windowStartEpoch: "2026-10-01T00:00:00Z",
+        windowEndEpoch: "2026-10-20T00:00:00Z",
+        candidateLaunches: [],
+        searchSummary: {
+          searchStartEpoch: "2026-01-01T00:00:00Z",
+          searchEndEpoch: "2028-01-01T00:00:00Z",
+          coarseSampleCount: 6,
+          refinedCandidateCount: 2,
+          scoringMode: "trajectory-delta-v-first",
+        },
+        warnings: [],
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    ),
+  );
+
+  await fetchLaunchWindow({
+    missionType: "trajectory",
+    departureBody: "earth",
+    targetBody: "mars",
+    earliestLaunchEpoch: "2026-01-01T00:00:00Z",
+  });
+
+  expect(globalThis.fetch).toHaveBeenCalledWith("/missions/launch-window", expect.any(Object));
 });

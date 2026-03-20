@@ -3,8 +3,9 @@ from pathlib import Path
 from fastapi import APIRouter, Response, status
 
 from app.core.ephemeris.factory import create_ephemeris
-from app.schemas.mission import MissionRequest, MissionTourRequest
+from app.schemas.mission import LaunchWindowRequest, MissionRequest, MissionTourRequest
 from app.services.gravity_assist_search import GravityAssistSearchService
+from app.services.launch_window_search import LaunchWindowSearchService
 from app.services.mission_service import MissionService
 from app.services.tour_planner import MissionTourPlanner
 
@@ -36,6 +37,28 @@ def search_gravity_assist(request: MissionRequest) -> dict:
         "ephemerisSource": getattr(search_service.ephemeris, "source_name", "unknown"),
         "candidates": [candidate.to_dict() for candidate in candidates],
     }
+
+
+@router.post("/launch-window")
+def launch_window(request: LaunchWindowRequest) -> dict:
+    service = LaunchWindowSearchService(ephemeris=create_ephemeris(DATA_PATH))
+    if request.missionType == "trajectory":
+        return service.search_trajectory_window(
+            departure_body=request.departureBody,
+            target_body=str(request.targetBody),
+            earliest_launch_epoch=request.earliestLaunchEpoch,
+        ).to_dict()
+
+    return service.search_tour_window(
+        departure_body=request.departureBody,
+        required_visit_bodies=tuple(request.requiredVisitBodies or []),
+        earliest_launch_epoch=request.earliestLaunchEpoch,
+        max_assist_bodies_per_leg=request.maxAssistBodiesPerLeg,
+        max_returned_candidates=request.maxReturnedCandidates,
+        allow_assist_bodies=request.allowAssistBodies,
+        allow_repeated_flybys=request.allowRepeatedFlybys,
+        propulsion_config=request.propulsionConfig,
+    ).to_dict()
 
 
 @router.post("/plan-tour")

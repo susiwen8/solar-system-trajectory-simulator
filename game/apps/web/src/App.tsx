@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 import MissionForm, { type MissionSubmission } from "./features/mission/components/MissionForm";
 import MissionSummary from "./features/mission/components/MissionSummary";
-import type { BodyState, MissionCandidate, MissionRequest, TrajectoryResult } from "./features/mission/types";
+import type {
+  BodyState,
+  LaunchWindowRequest,
+  LaunchWindowResponse,
+  MissionCandidate,
+  MissionRequest,
+  TrajectoryResult,
+} from "./features/mission/types";
 import SolarSystemScene from "./features/scene/components/SolarSystemScene";
-import { fetchEphemerisBodies, planMissionTour, propagateMission } from "./lib/api";
+import { fetchEphemerisBodies, fetchLaunchWindow, planMissionTour, propagateMission } from "./lib/api";
 import { planetLabel, t, type Language } from "./lib/i18n";
 
 export default function App() {
@@ -18,6 +25,7 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [launchWindowResult, setLaunchWindowResult] = useState<LaunchWindowResponse | null>(null);
   const ephemerisCacheRef = useRef<Record<string, { bodies: BodyState[]; ephemerisSource: string }>>({});
   const copy = t(language);
   const activeResult = result ? resolveActiveResult(result, activeCandidateIndex) : null;
@@ -95,14 +103,24 @@ export default function App() {
     setIsPlaying(false);
 
     try {
+      const effectiveLaunchEpoch =
+        submission.launchPlanning.mode === "manual"
+          ? submission.request.launchEpoch
+          : await resolveLaunchEpoch(submission);
       const nextResult =
         submission.kind === "tour"
-          ? await planMissionTour(submission.request)
-          : await propagateMission(submission.request as MissionRequest);
+          ? await planMissionTour({
+              ...submission.request,
+              launchEpoch: effectiveLaunchEpoch,
+            })
+          : await propagateMission({
+              ...submission.request,
+              launchEpoch: effectiveLaunchEpoch,
+            } as MissionRequest);
       setResult(nextResult);
       setActiveCandidateIndex(0);
       setEphemerisSource(nextResult.ephemerisSource);
-      setLaunchEpoch(submission.request.launchEpoch);
+      setLaunchEpoch(effectiveLaunchEpoch);
       setSelectedSampleIndex(0);
       ephemerisCacheRef.current = {};
     } catch (error) {
@@ -116,6 +134,15 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function resolveLaunchEpoch(submission: MissionSubmission): Promise<string> {
+    const launchWindow = await fetchLaunchWindow(buildLaunchWindowRequest(submission));
+    setLaunchWindowResult(launchWindow);
+    if (submission.launchPlanning.mode === "windowSelect") {
+      return submission.launchPlanning.selectedLaunchEpoch || launchWindow.recommendedLaunchEpoch;
+    }
+    return launchWindow.recommendedLaunchEpoch;
   }
 
   return (
@@ -144,7 +171,12 @@ export default function App() {
           <h1>{copy.appTitle}</h1>
         </div>
 
-        <MissionForm onSubmit={handleSubmit} language={language} loading={loading} />
+        <MissionForm
+          onSubmit={handleSubmit}
+          language={language}
+          loading={loading}
+          launchWindowResult={launchWindowResult}
+        />
 
         {errorMessage ? (
           <p className="alert-card" role="alert">
@@ -282,6 +314,30 @@ function resolveVisitSequenceBodies(route: Pick<MissionCandidate, "sequenceBodie
   }
 
   return route.fullSequenceBodies ?? [];
+}
+
+function buildLaunchWindowRequest(submission: MissionSubmission): LaunchWindowRequest {
+  if (submission.kind === "trajectory") {
+    return {
+      missionType: "trajectory",
+      departureBody: submission.request.departureBody,
+      targetBody: submission.request.targetBody,
+      earliestLaunchEpoch: submission.launchPlanning.earliestLaunchEpoch,
+      propulsionConfig: submission.request.propulsionConfig,
+    };
+  }
+
+  return {
+    missionType: "tour",
+    departureBody: submission.request.departureBody,
+    requiredVisitBodies: submission.request.requiredVisitBodies,
+    earliestLaunchEpoch: submission.launchPlanning.earliestLaunchEpoch,
+    maxAssistBodiesPerLeg: submission.request.maxAssistBodiesPerLeg,
+    maxReturnedCandidates: submission.request.maxReturnedCandidates,
+    allowAssistBodies: submission.request.allowAssistBodies,
+    allowRepeatedFlybys: submission.request.allowRepeatedFlybys,
+    propulsionConfig: submission.request.propulsionConfig,
+  };
 }
 
 function resolveFullSequenceBodies(route: Pick<MissionCandidate, "sequenceBodies" | "fullSequenceBodies">): string[] {

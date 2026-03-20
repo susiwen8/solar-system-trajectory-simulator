@@ -1,5 +1,7 @@
 import type {
   EphemerisBodiesResponse,
+  LaunchWindowRequest,
+  LaunchWindowResponse,
   MissionRequest,
   MissionTourRequest,
   TrajectoryResult
@@ -52,4 +54,20 @@ export async function planMissionTour(request: MissionTourRequest): Promise<Traj
   }
 
   return (await response.json()) as TrajectoryResult;
+}
+
+export async function fetchLaunchWindow(request: LaunchWindowRequest): Promise<LaunchWindowResponse> {
+  const response = await fetch(createApiUrl("/missions/launch-window"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(request)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Launch window request failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as LaunchWindowResponse;
 }

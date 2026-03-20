@@ -21,11 +21,18 @@ it("starts with mars selected by default", () => {
   expect(screen.getByRole("checkbox", { name: "火星" })).toBeChecked();
 });
 
-it("submits a trajectory request when exactly one body is selected", async () => {
+it("defaults to recommended launch window mode", () => {
+  render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
+
+  expect(screen.getByLabelText("发射方案")).toHaveValue("recommendedWindow");
+});
+
+it("submits a trajectory request in manual mode when exactly one body is selected", async () => {
   const onSubmit = vi.fn();
   render(<MissionForm onSubmit={onSubmit} language="en" loading={false} />);
 
   expect(screen.getByLabelText("Trajectory Mode")).toHaveValue("autoTransfer");
+  await userEvent.selectOptions(screen.getByLabelText("Launch Planning"), "manual");
   await userEvent.clear(screen.getByLabelText("Launch Epoch"));
   await userEvent.type(screen.getByLabelText("Launch Epoch"), "2026-10-15T00:00:00Z");
   await userEvent.click(screen.getByRole("button", { name: "Propagate Trajectory" }));
@@ -39,15 +46,20 @@ it("submits a trajectory request when exactly one body is selected", async () =>
         launchEpoch: "2026-10-15T00:00:00Z",
         initialState: { launchFromBody: { mode: "autoTransfer" } },
       }),
+      launchPlanning: expect.objectContaining({
+        mode: "manual",
+        earliestLaunchEpoch: "2026-10-15T00:00:00Z",
+      }),
     }),
   );
 });
 
-it("submits a tour request when multiple bodies are selected", async () => {
+it("submits a tour request in manual mode when multiple bodies are selected", async () => {
   const onSubmit = vi.fn();
   render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
 
   await userEvent.click(screen.getByRole("checkbox", { name: "金星" }));
+  await userEvent.selectOptions(screen.getByLabelText("发射方案"), "manual");
   await userEvent.clear(screen.getByLabelText("发射时刻"));
   await userEvent.type(screen.getByLabelText("发射时刻"), "2026-03-01T00:00:00Z");
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
@@ -59,6 +71,10 @@ it("submits a tour request when multiple bodies are selected", async () => {
         departureBody: "earth",
         requiredVisitBodies: ["mars", "venus"],
         launchEpoch: "2026-03-01T00:00:00Z",
+      }),
+      launchPlanning: expect.objectContaining({
+        mode: "manual",
+        earliestLaunchEpoch: "2026-03-01T00:00:00Z",
       }),
     }),
   );

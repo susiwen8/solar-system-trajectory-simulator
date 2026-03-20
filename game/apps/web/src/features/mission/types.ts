@@ -47,10 +47,18 @@ export type MissionSegmentMetadata = {
   maneuverStrategy?: string;
   closestApproachEstimateKm?: number | null;
   bodyId?: string;
+  encounterType?: string;
+  sphereOfInfluenceRadiusKm?: number;
   periapsisAltitudeKm?: number;
+  periapsisRadiusKm?: number;
   turnAngleDeg?: number;
+  incomingVInfinityKmPerS?: number;
+  outgoingVInfinityKmPerS?: number;
   inboundVInfinityKmPerS?: number;
   outboundVInfinityKmPerS?: number;
+  insertionDeltaVKmPerS?: number;
+  postCaptureOrbitType?: string;
+  captureAchieved?: boolean;
   bPlaneLike?: {
     btKm?: number;
     brKm?: number;
@@ -96,6 +104,46 @@ export type MissionTourRequest = {
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
   propulsionConfig?: PropulsionConfig;
+};
+
+export type LaunchPlanningMode = "recommendedWindow" | "windowSelect" | "manual";
+
+export type LaunchWindowRequest = {
+  missionType: "trajectory" | "tour";
+  departureBody: "earth";
+  targetBody?: Exclude<BodyId, "earth"> | "earth";
+  requiredVisitBodies?: Exclude<BodyId, "earth">[];
+  earliestLaunchEpoch?: string;
+  maxAssistBodiesPerLeg?: number;
+  maxReturnedCandidates?: number;
+  allowAssistBodies?: boolean;
+  allowRepeatedFlybys?: boolean;
+  propulsionConfig?: PropulsionConfig;
+};
+
+export type LaunchWindowCandidate = {
+  launchEpoch: string;
+  score: number;
+  deltaVKmPerS: number;
+  flightTimeSeconds: number;
+  targetBody?: string;
+  visitOrder?: string[];
+  fullSequenceBodies?: string[];
+};
+
+export type LaunchWindowResponse = {
+  recommendedLaunchEpoch: string;
+  windowStartEpoch: string;
+  windowEndEpoch: string;
+  candidateLaunches: LaunchWindowCandidate[];
+  searchSummary: {
+    searchStartEpoch: string;
+    searchEndEpoch: string;
+    coarseSampleCount: number;
+    refinedCandidateCount: number;
+    scoringMode: string;
+  };
+  warnings: string[];
 };
 
 export type PropulsionConfig = {

@@ -139,6 +139,16 @@ export const messages = {
     fullSequenceLabel: "Full Sequence",
     visitCountLabel: "Visits",
     departureBody: "Departure Body",
+    launchPlanningMode: "Launch Planning",
+    recommendedWindowMode: "Recommended Window",
+    windowSelectMode: "Pick Within Window",
+    manualLaunchMode: "Manual Date",
+    earliestLaunchEpoch: "Earliest Launch Epoch",
+    selectedLaunchEpoch: "Selected Launch Date",
+    recommendedLaunchWindow: "Recommended Launch Window",
+    recommendedLaunchDate: "Best Launch Date",
+    launchWindowCandidates: "Candidate Launches",
+    launchWindowRequestFailed: "Launch-window request failed",
     trajectoryMode: "Trajectory Mode",
     launchEpoch: "Launch Epoch",
     missionDuration: "Mission Duration (s)",
@@ -166,6 +176,9 @@ export const messages = {
     earthEscape: "Earth Escape",
     heliocentricCruise: "Heliocentric Cruise",
     gravityAssistFlyby: "Gravity-Assist Flyby",
+    flybyEncounter: "Gravity-Assist Flyby",
+    arrivalHyperbolicApproach: "Arrival Hyperbolic Approach",
+    orbitInsertionBurn: "Orbit Insertion Burn",
   },
   zh: {
     languageZh: "中文",
@@ -276,6 +289,16 @@ export const messages = {
     fullSequenceLabel: "完整序列",
     visitCountLabel: "拜访数",
     departureBody: "出发天体",
+    launchPlanningMode: "发射方案",
+    recommendedWindowMode: "推荐窗口",
+    windowSelectMode: "窗口内选择",
+    manualLaunchMode: "手动日期",
+    earliestLaunchEpoch: "最早发射时刻",
+    selectedLaunchEpoch: "选定发射时刻",
+    recommendedLaunchWindow: "推荐发射窗口",
+    recommendedLaunchDate: "最佳发射日期",
+    launchWindowCandidates: "候选发射日",
+    launchWindowRequestFailed: "发射窗口计算失败",
     trajectoryMode: "轨迹模式",
     launchEpoch: "发射时刻",
     missionDuration: "任务时长（秒）",
@@ -302,6 +325,9 @@ export const messages = {
     earthEscape: "地球逃逸",
     heliocentricCruise: "日心巡航",
     gravityAssistFlyby: "引力辅助飞越",
+    flybyEncounter: "引力辅助飞越",
+    arrivalHyperbolicApproach: "到达双曲逼近",
+    orbitInsertionBurn: "入轨制动",
   },
 } as const;
 
@@ -356,6 +382,18 @@ export function localizeMissionSegment(language: Language, segmentType: string) 
 
   if (segmentType === "gravityAssistFlyby") {
     return copy.gravityAssistFlyby;
+  }
+
+  if (segmentType === "flybyEncounter") {
+    return copy.flybyEncounter;
+  }
+
+  if (segmentType === "arrivalHyperbolicApproach") {
+    return copy.arrivalHyperbolicApproach;
+  }
+
+  if (segmentType === "orbitInsertionBurn") {
+    return copy.orbitInsertionBurn;
   }
 
   return segmentType;

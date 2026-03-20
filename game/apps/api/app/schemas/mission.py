@@ -148,3 +148,34 @@ class MissionTourRequest(BaseModel):
         if self.departureBody in unique_bodies:
             raise ValueError("requiredVisitBodies cannot include the departure body")
         return self
+
+
+class LaunchWindowRequest(BaseModel):
+    missionType: Literal["trajectory", "tour"]
+    departureBody: str = Field(min_length=1)
+    targetBody: Optional[str] = None
+    requiredVisitBodies: Optional[List[str]] = None
+    earliestLaunchEpoch: Optional[str] = Field(default=None, min_length=1)
+    maxAssistBodiesPerLeg: int = Field(default=2, ge=0, le=2)
+    maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
+    allowAssistBodies: bool = True
+    allowRepeatedFlybys: bool = True
+    propulsionConfig: Optional[PropulsionConfig] = None
+
+    @model_validator(mode="after")
+    def validate_by_mission_type(self) -> "LaunchWindowRequest":
+        if self.missionType == "trajectory":
+            if not self.targetBody:
+                raise ValueError("targetBody is required for trajectory launch-window requests")
+            if self.requiredVisitBodies:
+                raise ValueError("requiredVisitBodies is not supported for trajectory launch-window requests")
+            return self
+
+        if not self.requiredVisitBodies:
+            raise ValueError("requiredVisitBodies is required for tour launch-window requests")
+        unique_bodies = set(self.requiredVisitBodies)
+        if len(unique_bodies) != len(self.requiredVisitBodies):
+            raise ValueError("requiredVisitBodies must be unique")
+        if self.departureBody in unique_bodies:
+            raise ValueError("requiredVisitBodies cannot include the departure body")
+        return self
