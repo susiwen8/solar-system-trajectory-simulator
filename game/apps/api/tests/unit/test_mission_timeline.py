@@ -97,3 +97,62 @@ def test_build_timeline_preserves_segment_boundary_events() -> None:
     )
 
     assert any(event["type"] == "earthSoiExit" for event in timeline["events"])
+
+
+def test_build_timeline_includes_capture_events_from_segments() -> None:
+    timeline = build_mission_timeline(
+        launch_epoch="2026-01-01T00:00:00Z",
+        flight_time_seconds=4.0 * 24.0 * 3600.0,
+        target_body="mars",
+        samples=[_sample(0.0), _sample(2.0 * 24.0 * 3600.0), _sample(4.0 * 24.0 * 3600.0)],
+        closest_approach={
+            "bodyId": "mars",
+            "epoch": "2026-01-05T00:00:00Z",
+            "distanceKm": 1200.0,
+            "epochSeconds": 4.0 * 24.0 * 3600.0,
+        },
+        segment_events=[
+            {
+                "type": "orbitInsertionBurn",
+                "epoch": "2026-01-05T00:00:00Z",
+                "title": "Orbit Insertion Burn",
+                "description": "Perform the primary capture burn at Mars arrival.",
+                "relatedBody": "mars",
+            },
+            {
+                "type": "captureEstablished",
+                "epoch": "2026-01-05T01:30:00Z",
+                "title": "Capture Established",
+                "description": "Establish the first bound orbit around Mars.",
+                "relatedBody": "mars",
+            },
+        ],
+    )
+
+    assert any(event["type"] == "orbitInsertionBurn" for event in timeline["events"])
+    assert any(event["type"] == "captureEstablished" for event in timeline["events"])
+
+
+def test_build_timeline_accepts_segment_events_with_start_epoch() -> None:
+    timeline = build_mission_timeline(
+        launch_epoch="2026-01-01T00:00:00Z",
+        flight_time_seconds=3.0 * 24.0 * 3600.0,
+        target_body="mars",
+        samples=[_sample(0.0), _sample(1.5 * 24.0 * 3600.0), _sample(3.0 * 24.0 * 3600.0)],
+        closest_approach={
+            "bodyId": "mars",
+            "epoch": "2026-01-04T00:00:00Z",
+            "distanceKm": 2200.0,
+            "epochSeconds": 3.0 * 24.0 * 3600.0,
+        },
+        segment_events=[
+            {
+                "type": "dsm-1",
+                "startEpoch": "2026-01-02T06:00:00Z",
+                "title": "Deep-Space Maneuver 1",
+                "description": "Execute the first correction burn during cruise.",
+            }
+        ],
+    )
+
+    assert any(event["type"] == "dsm-1" for event in timeline["events"])

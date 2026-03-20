@@ -133,6 +133,7 @@ def test_mission_service_builds_staged_departure_segments(bundled_ephemeris) -> 
         "launchParkingOrbit",
         "earthEscape",
     ]
+    assert "arrivalCapture" in [segment["segmentType"] for segment in result.segments]
 
 
 def test_phase_a_timeline_includes_parking_orbit_and_earth_escape(bundled_ephemeris) -> None:
@@ -165,9 +166,13 @@ def test_mission_service_builds_cruise_segment_metadata_for_auto_transfer(bundle
     result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
 
     cruise_segment = next(segment for segment in result.segments if segment["segmentType"] == "heliocentricCruise")
+    arrival_capture_segment = next(segment for segment in result.segments if segment["segmentType"] == "arrivalCapture")
     assert cruise_segment["metadata"]["targetBody"] == "mars"
     assert "maneuverCount" in cruise_segment["metadata"]
     assert "massSummary" in cruise_segment
+    assert arrival_capture_segment["orbitSummary"]["isBound"] is True
+    assert arrival_capture_segment["samples"]
+    assert arrival_capture_segment["initialState"]["referenceBodyId"] == "mars"
 
 
 def test_mission_service_keeps_cruise_mass_summary_in_sync_with_propulsion_outputs(bundled_ephemeris) -> None:

@@ -64,9 +64,12 @@ def build_mission_timeline(
         return event_id
 
     def add_segment_event(event: Dict[str, object]) -> str:
+        event_epoch = _segment_event_epoch(event)
+        if event_epoch is None:
+            raise ValueError(f"Segment event '{event.get('type', 'unknown')}' is missing an epoch")
         return add_event(
             str(event["type"]),
-            _parse_epoch(str(event["epoch"])),
+            event_epoch,
             str(event.get("title", event["type"])),
             str(event.get("description", event["type"])),
             str(event["relatedBody"]) if event.get("relatedBody") is not None else None,
@@ -96,7 +99,9 @@ def build_mission_timeline(
         )
 
     segment_event_map = {
-        str(event["type"]): event for event in (segment_events or [])
+        str(event["type"]): event
+        for event in (segment_events or [])
+        if _segment_event_epoch(event) is not None
     }
     segment_event_ids = {
         event_type: add_segment_event(event) for event_type, event in segment_event_map.items()
@@ -416,6 +421,13 @@ def _can_merge(left: Dict[str, object], right: Dict[str, object]) -> bool:
         and left["relatedBody"] == right["relatedBody"]
         and left["end"] == right["start"]
     )
+
+
+def _segment_event_epoch(event: Dict[str, object]) -> Optional[datetime]:
+    raw_epoch = event.get("epoch") or event.get("startEpoch")
+    if raw_epoch is None:
+        return None
+    return _parse_epoch(str(raw_epoch))
 
 
 def _infer_mission_end(

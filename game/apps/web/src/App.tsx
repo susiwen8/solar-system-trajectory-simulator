@@ -142,29 +142,9 @@ export default function App() {
             </div>
           </div>
           <h1>{copy.appTitle}</h1>
-          <p className="mission-panel__lede">{copy.appLede}</p>
         </div>
 
         <MissionForm onSubmit={handleSubmit} language={language} loading={loading} />
-
-        <div className="status-strip" aria-label={copy.missionStatus}>
-          <div className="status-pill">
-            <span className="status-pill__label">{copy.referenceFrame}</span>
-            <strong>{activeResult?.referenceFrame ?? "heliocentric-inertial"}</strong>
-          </div>
-        <div className="status-pill">
-          <span className="status-pill__label">{copy.currentEpoch}</span>
-          <strong>{currentEpoch ?? copy.awaitingPropagation}</strong>
-        </div>
-        <div className="status-pill">
-          <span className="status-pill__label">{copy.ephemerisSource}</span>
-          <strong>{ephemerisSource ?? "bundled-keplerian"}</strong>
-        </div>
-        <div className={`status-pill ${loading ? "status-pill--active" : ""}`}>
-          <span className="status-pill__label">{copy.propagation}</span>
-          <strong>{loading ? copy.running : copy.standby}</strong>
-          </div>
-        </div>
 
         {errorMessage ? (
           <p className="alert-card" role="alert">
@@ -172,15 +152,12 @@ export default function App() {
           </p>
         ) : null}
 
-        {loading ? <p className="loading-copy">{copy.runningPropagation}</p> : null}
-
         {activeResult ? (
           <MissionSummary result={activeResult} language={language} />
         ) : (
           <section className="summary-card summary-card--placeholder" aria-label={copy.missionSummary}>
             <p className="summary-card__eyebrow">{copy.telemetrySnapshot}</p>
             <h2>{copy.readyTitle}</h2>
-            <p>{copy.readyBody}</p>
           </section>
         )}
 
@@ -188,11 +165,10 @@ export default function App() {
           <section className="summary-card" aria-label={copy.candidatePlans}>
             <p className="summary-card__eyebrow">{copy.candidatePlans}</p>
             <h2>{copy.selectedCandidateLabel}</h2>
-            <p>{copy.candidatePlansBody}</p>
             <div className="candidate-list">
               {result.candidates.map((candidate, index) => (
                 <button
-                  key={`${candidateLabelBodies(candidate).join("-")}-${index}`}
+                  key={`${resolveVisitSequenceBodies(candidate).join("-")}-${index}`}
                   type="button"
                   className={`candidate-card ${index === activeCandidateIndex ? "candidate-card--active" : ""}`}
                   onClick={() => {
@@ -202,15 +178,20 @@ export default function App() {
                     ephemerisCacheRef.current = {};
                   }}
                 >
-                  <strong>{candidateLabelBodies(candidate).map((bodyId) => planetLabel(language, bodyId)).join(" -> ")}</strong>
+                  <strong>{formatBodySequence(language, resolveVisitSequenceBodies(candidate))}</strong>
                   {candidate.visitOrder?.length ? (
                     <span>
                       {copy.visitOrderLabel}: {candidate.visitOrder.map((bodyId) => planetLabel(language, bodyId)).join(" -> ")}
                     </span>
                   ) : null}
+                  {shouldShowFullSequence(candidate) ? (
+                    <span>{copy.fullSequenceLabel}: {formatBodySequence(language, resolveFullSequenceBodies(candidate))}</span>
+                  ) : null}
                   <span>{copy.scoreLabel}: {candidate.score.toFixed(2)}</span>
                   <span>{copy.deltaVLabel}: {candidate.deltaVKmPerS.toFixed(2)} km/s</span>
-                  <span>{copy.flybyCountLabel}: {Math.max(candidateLabelBodies(candidate).length - (candidate.visitOrder?.length ?? 2) - 1, 0)}</span>
+                  <span>
+                    {copy.flybyCountLabel}: {Math.max(resolveFullSequenceBodies(candidate).length - (candidate.visitOrder?.length ?? 2) - 1, 0)}
+                  </span>
                   {candidate.visitOrder?.length ? <span>{copy.visitCountLabel}: {candidate.visitOrder.length}</span> : null}
                 </button>
               ))}
@@ -221,14 +202,6 @@ export default function App() {
       </aside>
 
       <section className="scene-stage" aria-label={copy.primaryFlightView}>
-        <div className="scene-stage__header">
-          <div>
-            <p className="eyebrow">{copy.primaryView}</p>
-            <h2>{copy.theatreTitle}</h2>
-          </div>
-          <p className="scene-stage__copy">{copy.theatreCopy}</p>
-        </div>
-
         {activeResult ? (
           <SolarSystemScene
             result={activeResult}
@@ -255,9 +228,7 @@ export default function App() {
               <span className="scene-sun" />
             </div>
             <div className="scene-empty-copy">
-              <p className="eyebrow">{copy.visualStandby}</p>
               <h3>{copy.paintTrajectory}</h3>
-              <p>{copy.standbyBody}</p>
             </div>
           </section>
         )}
@@ -301,8 +272,34 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
   };
 }
 
-function candidateLabelBodies(candidate: MissionCandidate): string[] {
-  return candidate.fullSequenceBodies ?? candidate.sequenceBodies ?? [];
+function resolveVisitSequenceBodies(route: Pick<MissionCandidate, "sequenceBodies" | "fullSequenceBodies" | "visitOrder">): string[] {
+  if (route.visitOrder?.length) {
+    return ["earth", ...route.visitOrder];
+  }
+
+  if (route.sequenceBodies?.length) {
+    return route.sequenceBodies;
+  }
+
+  return route.fullSequenceBodies ?? [];
+}
+
+function resolveFullSequenceBodies(route: Pick<MissionCandidate, "sequenceBodies" | "fullSequenceBodies">): string[] {
+  if (route.fullSequenceBodies?.length) {
+    return route.fullSequenceBodies;
+  }
+
+  return route.sequenceBodies ?? [];
+}
+
+function shouldShowFullSequence(candidate: MissionCandidate): boolean {
+  const visitSequence = resolveVisitSequenceBodies(candidate);
+  const fullSequence = resolveFullSequenceBodies(candidate);
+  return fullSequence.length > 0 && fullSequence.join("|") !== visitSequence.join("|");
+}
+
+function formatBodySequence(language: Language, bodyIds: string[]): string {
+  return bodyIds.map((bodyId) => planetLabel(language, bodyId)).join(" -> ");
 }
 
 function epochFromOffset(baseEpoch: string, offsetSeconds: number): string {

@@ -6,6 +6,8 @@ type MissionSummaryProps = {
   language: Language;
 };
 
+type RouteDescriptor = Pick<TrajectoryResult, "sequenceBodies" | "fullSequenceBodies" | "visitOrder" | "closestApproach">;
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0
@@ -25,6 +27,34 @@ function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
     maximumFractionDigits: durationHours >= 10 ? 0 : 1,
     minimumFractionDigits: 0,
   }).format(durationHours);
+}
+
+function resolveVisitSequenceBodies(route: RouteDescriptor): string[] {
+  if (route.visitOrder?.length) {
+    return ["earth", ...route.visitOrder];
+  }
+
+  if (route.sequenceBodies?.length) {
+    return route.sequenceBodies;
+  }
+
+  if (route.fullSequenceBodies?.length) {
+    return route.fullSequenceBodies;
+  }
+
+  return ["earth", route.closestApproach.bodyId];
+}
+
+function resolveFullSequenceBodies(route: RouteDescriptor): string[] {
+  if (route.fullSequenceBodies?.length) {
+    return route.fullSequenceBodies;
+  }
+
+  return route.sequenceBodies?.length ? route.sequenceBodies : [];
+}
+
+function formatBodySequence(language: Language, bodyIds: string[]): string {
+  return bodyIds.map((bodyId) => planetLabel(language, bodyId)).join(" -> ");
 }
 
 function formatSegmentDetails(result: TrajectoryResult, language: Language): Array<{ key: string; text: string }> {
@@ -84,6 +114,10 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
   const copy = t(language);
   const segments = result.segments ?? [];
   const segmentDetails = formatSegmentDetails(result, language);
+  const visitSequence = resolveVisitSequenceBodies(result);
+  const fullSequence = resolveFullSequenceBodies(result);
+  const showFullSequence = fullSequence.length > 0 && fullSequence.join("|") !== visitSequence.join("|");
+
   return (
     <section className="summary-card" aria-label={copy.missionSummary}>
       <p className="summary-card__eyebrow">{copy.telemetrySnapshot}</p>
@@ -106,6 +140,16 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
           <span className="summary-metric__label">{copy.ephemeris}</span>
           <strong>{result.ephemerisSource}</strong>
         </article>
+        <article className="summary-metric summary-metric--wide">
+          <span className="summary-metric__label">{copy.sequenceLabel}</span>
+          <strong>{`: ${formatBodySequence(language, visitSequence)}`}</strong>
+        </article>
+        {showFullSequence ? (
+          <article className="summary-metric summary-metric--wide">
+            <span className="summary-metric__label">{copy.fullSequenceLabel}</span>
+            <strong>{`: ${formatBodySequence(language, fullSequence)}`}</strong>
+          </article>
+        ) : null}
         {result.totalPropellantUsedKg != null ? (
           <article className="summary-metric">
             <span className="summary-metric__label">{copy.propellantUsed}</span>

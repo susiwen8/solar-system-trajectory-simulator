@@ -132,7 +132,7 @@ class MissionRequest(BaseModel):
 
 class MissionTourRequest(BaseModel):
     departureBody: str = Field(min_length=1)
-    requiredVisitBodies: List[str] = Field(min_length=1, max_length=4)
+    requiredVisitBodies: List[str] = Field(min_length=1)
     launchEpoch: str = Field(min_length=1)
     maxAssistBodiesPerLeg: int = Field(default=2, ge=0, le=2)
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)

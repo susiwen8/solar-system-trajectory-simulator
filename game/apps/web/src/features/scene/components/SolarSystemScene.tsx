@@ -1,17 +1,53 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import * as THREE from "three";
 
 import { localizeMissionSegment, planetLabel, t, type Language } from "../../../lib/i18n";
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
+import TrajectoryInsetMap from "./TrajectoryInsetMap";
+import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
+import { buildProbeCameraFrame } from "../lib/camera-frame";
+import {
+  advanceCameraMotion,
+  advanceProbeMotion,
+  type CameraMotionState,
+  type ProbeMotionState,
+} from "../lib/camera-motion";
+import {
+  applyOrbitDragDelta,
+  applyOrbitPinchScale,
+  applyOrbitWheelDelta,
+  createDefaultOrbitCameraState,
+  type OrbitCameraState,
+} from "../lib/orbit-camera";
+import {
+  computeFocusBodyVisualProfile,
+  getPlanetaryRingProfile,
+} from "../lib/focus-visuals";
+import { buildInsetMapModel } from "../lib/inset-map";
 import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
+import { resolveProbeAttitudeDirection } from "../lib/probe-attitude";
+import {
+  PROBE_EFFECTS_SCALE,
+  PROBE_MODEL_ALIGNMENT_YAW_RAD,
+  PROBE_VISUAL_SCALE,
+} from "../lib/probe-model";
 import { scaleDistanceKm } from "../lib/scale";
 import {
   buildSpeedTelemetry,
-  formatDeltaSpeed,
   formatSpeedValue,
-  type SpeedTelemetryMode,
 } from "../lib/speed-telemetry";
-import { computeBirdsEyeFrame, type BirdsEyeFrame } from "../lib/view";
+import { resolveProbeThrustState } from "../lib/probe-thrust";
+import {
+  buildArrivalCaptureModel,
+  buildDisplayCapturePathPoints,
+} from "../lib/arrival-capture";
 
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
@@ -28,16 +64,38 @@ type SolarSystemSceneProps = {
 };
 
 type SceneRuntime = {
-  camera: THREE.OrthographicCamera;
-  dynamicGroup: THREE.Group;
-  frame: BirdsEyeFrame;
+  bodiesGroup: THREE.Group;
+  camera: THREE.PerspectiveCamera;
+  frameHandle: number | null;
+  currentMotion: CameraMotionState | null;
+  currentProbeMotion: ProbeMotionState | null;
+  missionGroup: THREE.Group;
+  playbackGroup: THREE.Group;
+  probeVisual: ProbeVisualRuntime;
   renderer: THREE.WebGLRenderer;
   resizeObserver: ResizeObserver | null;
   render: () => void;
   scene: THREE.Scene;
-  setFrame: (frame: BirdsEyeFrame) => void;
+  targetMotion: CameraMotionState | null;
+  targetProbeMotion: ProbeMotionState | null;
+  setProbeTarget: (motion: ProbeMotionState) => void;
+  setView: (
+    samplePositionKm: [number, number, number],
+    view: ProbeCameraView,
+    zoom: number,
+    orbitState: OrbitCameraState,
+  ) => void;
   setZoom: (zoom: number) => void;
   stop: () => void;
+};
+
+type ProbeVisualRuntime = {
+  engineGlowMaterial: THREE.MeshStandardMaterial;
+  group: THREE.Group;
+  streakMaterials: Array<{
+    material: THREE.LineBasicMaterial;
+    opacityScale: number;
+  }>;
 };
 
 const bodyColors: Record<string, string> = {
@@ -68,6 +126,24 @@ const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 2.4;
 const DEFAULT_ZOOM = 1.15;
 
+type PointerOrbitGesture = {
+  pointerId: number;
+  lastX: number;
+  lastY: number;
+};
+
+type TouchOrbitGesture =
+  | {
+      mode: "rotate";
+      touchId: number;
+      lastX: number;
+      lastY: number;
+    }
+  | {
+      mode: "pinch";
+      lastDistance: number;
+    };
+
 export default function SolarSystemScene({
   result,
   bodies,
@@ -84,26 +160,48 @@ export default function SolarSystemScene({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<SceneRuntime | null>(null);
+  const pointerGestureRef = useRef<PointerOrbitGesture | null>(null);
+  const touchGestureRef = useRef<TouchOrbitGesture | null>(null);
   const [renderMode, setRenderMode] = useState<"webgl" | "fallback">("fallback");
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
+  const [orbitCameraState, setOrbitCameraState] = useState<OrbitCameraState>(() => createDefaultOrbitCameraState());
   const [hoveredBodyId, setHoveredBodyId] = useState<string | null>(null);
-  const [telemetryMode, setTelemetryMode] = useState<SpeedTelemetryMode>("speed");
   const copy = t(language);
-  const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, telemetryMode);
+  const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, "speed");
+  const arrivalCaptureModel = buildArrivalCaptureModel(result);
+  const displayedCapturePathPoints = arrivalCaptureModel
+    ? buildDisplayCapturePathPoints(
+        arrivalCaptureModel.pathPoints,
+        bodyRadii[arrivalCaptureModel.bodyId] ?? 1.8,
+      )
+    : null;
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
   const upcomingManeuver = activeManeuver ? null : findUpcomingManeuver(result.maneuverEvents, currentEpoch);
   const timelineSnapshot = getMissionTimelineSnapshot(result.missionTimeline, currentEpoch);
-  const currentPhase = timelineSnapshot.currentPhase;
   const nextEvent = timelineSnapshot.nextEvent;
-  const phaseSegments = result.missionTimeline?.phases ?? [];
+  const currentObjective = result.missionTimeline?.currentObjective ?? planetLabel(language, result.closestApproach.bodyId);
+  const nextEventSummary = nextEvent && currentEpoch
+    ? `${nextEvent.title} · ${formatTimeUntil(currentEpoch, nextEvent.epoch, language)}`
+    : nextEvent?.title ?? copy.noUpcomingEvent;
   const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
-  const activeSegmentDetail = formatActiveSegmentDetail(activeSegment, language);
-  const telemetryModeOptions: Array<{ key: SpeedTelemetryMode; label: string }> = [
-    { key: "speed", label: copy.speedModeMagnitude },
-    { key: "vx", label: copy.speedModeVx },
-    { key: "vy", label: copy.speedModeVy },
-    { key: "vz", label: copy.speedModeVz },
-  ];
+  const baseSampleIndex = Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0));
+  const activeSample = result.samples[baseSampleIndex] ?? result.samples[0];
+  const displayedPathSamples = result.samples.slice(0, baseSampleIndex + 1);
+  const cameraView = activeSample
+    ? computeProbeCameraView({
+        sample: activeSample,
+        bodies,
+        closestApproach: result.closestApproach,
+        activeSegment,
+      })
+    : null;
+  const insetMapModel = buildInsetMapModel({
+    samples: result.samples,
+    bodies,
+    closestApproach: result.closestApproach,
+    selectedSampleIndex,
+    flybyEvents: result.flybyEvents ?? [],
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -136,84 +234,198 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncSceneObjects(runtime, bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language);
-  }, [bodies, result, launchEpoch, selectedSampleIndex, hoveredBodyId, language]);
+    syncMissionScene(runtime, result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints);
+  }, [result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return;
+    }
+
+    syncPlaybackScene(runtime, bodies, result, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, activeSample, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints);
+  }, [activeSample, bodies, result, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
   }, [zoomLevel]);
 
+  useEffect(() => {
+    setOrbitCameraState(createDefaultOrbitCameraState());
+    pointerGestureRef.current = null;
+    touchGestureRef.current = null;
+  }, [result]);
+
   function handleZoomChange(nextZoom: number) {
     setZoomLevel(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM));
+  }
+
+  function handleSurfacePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "touch" || event.button !== 0) {
+      return;
+    }
+
+    pointerGestureRef.current = {
+      pointerId: event.pointerId,
+      lastX: event.clientX,
+      lastY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleSurfacePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "touch") {
+      return;
+    }
+
+    const gesture = pointerGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.lastX;
+    const deltaY = event.clientY - gesture.lastY;
+    if (deltaX === 0 && deltaY === 0) {
+      return;
+    }
+
+    pointerGestureRef.current = {
+      ...gesture,
+      lastX: event.clientX,
+      lastY: event.clientY,
+    };
+    setOrbitCameraState((current) => applyOrbitDragDelta(current, { deltaX, deltaY }));
+  }
+
+  function handleSurfacePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    if (pointerGestureRef.current?.pointerId === event.pointerId) {
+      pointerGestureRef.current = null;
+    }
+
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }
+
+  function handleSurfaceWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setOrbitCameraState((current) => applyOrbitWheelDelta(current, event.deltaY));
+  }
+
+  function handleSurfaceTouchStart(event: ReactTouchEvent<HTMLDivElement>) {
+    if (event.touches.length >= 2) {
+      touchGestureRef.current = {
+        mode: "pinch",
+        lastDistance: measureTouchDistance(event.touches[0], event.touches[1]),
+      };
+      event.preventDefault();
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      touchGestureRef.current = {
+        mode: "rotate",
+        touchId: event.touches[0].identifier,
+        lastX: event.touches[0].clientX,
+        lastY: event.touches[0].clientY,
+      };
+    }
+  }
+
+  function handleSurfaceTouchMove(event: ReactTouchEvent<HTMLDivElement>) {
+    const gesture = touchGestureRef.current;
+    if (!gesture) {
+      return;
+    }
+
+    if (gesture.mode === "pinch" && event.touches.length >= 2) {
+      const nextDistance = measureTouchDistance(event.touches[0], event.touches[1]);
+      if (gesture.lastDistance > 0) {
+        setOrbitCameraState((current) => applyOrbitPinchScale(current, nextDistance / gesture.lastDistance));
+      }
+      touchGestureRef.current = {
+        mode: "pinch",
+        lastDistance: nextDistance,
+      };
+      event.preventDefault();
+      return;
+    }
+
+    if (gesture.mode === "rotate" && event.touches.length === 1) {
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - gesture.lastX;
+      const deltaY = touch.clientY - gesture.lastY;
+      touchGestureRef.current = {
+        mode: "rotate",
+        touchId: touch.identifier,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+      };
+      setOrbitCameraState((current) => applyOrbitDragDelta(current, { deltaX, deltaY }));
+      event.preventDefault();
+    }
+  }
+
+  function handleSurfaceTouchEnd(event: ReactTouchEvent<HTMLDivElement>) {
+    if (event.touches.length >= 2) {
+      touchGestureRef.current = {
+        mode: "pinch",
+        lastDistance: measureTouchDistance(event.touches[0], event.touches[1]),
+      };
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      touchGestureRef.current = {
+        mode: "rotate",
+        touchId: event.touches[0].identifier,
+        lastX: event.touches[0].clientX,
+        lastY: event.touches[0].clientY,
+      };
+      return;
+    }
+
+    touchGestureRef.current = null;
   }
 
   return (
     <section className="scene-shell" aria-label={copy.trajectoryScene}>
       <div className="scene-shell__hud">
         <div className="scene-shell__hud-copy">
-          <p className="eyebrow">{copy.trajectoryScene}</p>
-          <h3>{copy.fixedBirdsEye}</h3>
           <p>{currentEpoch ? `${copy.currentEpoch}: ${currentEpoch}` : copy.currentEpochPending}</p>
-        </div>
-
-        <div className="scene-shell__target-card">
-          <span>{copy.targetLabel}</span>
-          <strong>{planetLabel(language, result.closestApproach.bodyId)}</strong>
+          {activeSegment ? (
+            <p>{`${copy.missionSegments}: ${localizeMissionSegment(language, activeSegment.segmentType)}`}</p>
+          ) : null}
+          <p>{`${copy.missionObjective}: ${currentObjective}`}</p>
+          <p>{`${copy.nextEvent}: ${nextEventSummary}`}</p>
+          <p>{`${copy.currentSpeed}: ${formatSpeedValue(telemetry.currentValue)}`}</p>
         </div>
       </div>
 
       <div
         ref={surfaceRef}
         className="scene-shell__surface"
-        onWheel={(event) => {
-          event.preventDefault();
-          handleZoomChange(zoomLevel + (event.deltaY < 0 ? 0.12 : -0.12));
+        data-testid="scene-surface"
+        onPointerDown={handleSurfacePointerDown}
+        onPointerMove={handleSurfacePointerMove}
+        onPointerUp={handleSurfacePointerUp}
+        onPointerCancel={handleSurfacePointerUp}
+        onWheel={handleSurfaceWheel}
+        onTouchStart={handleSurfaceTouchStart}
+        onTouchMove={handleSurfaceTouchMove}
+        onTouchEnd={handleSurfaceTouchEnd}
+        onTouchCancel={() => {
+          touchGestureRef.current = null;
         }}
       >
         <canvas ref={canvasRef} aria-label={copy.threeCanvas} className="scene-canvas" />
-
-        <div className="scene-telemetry" aria-label={copy.speedTelemetry}>
-          <div className="scene-telemetry__header">
-            <div>
-              <span className="scene-telemetry__label">{copy.speedTelemetry}</span>
-              <strong>
-                {telemetryModeOptions.find((option) => option.key === telemetryMode)?.label ?? copy.speedModeMagnitude}
-              </strong>
-            </div>
-            <div className="scene-telemetry__tabs" aria-label={copy.speedTelemetry}>
-              {telemetryModeOptions.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  className="scene-telemetry__tab"
-                  data-active={telemetryMode === option.key ? "true" : "false"}
-                  onClick={() => setTelemetryMode(option.key)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="scene-telemetry__metrics">
-            <div className="scene-telemetry__metric">
-              <span className="scene-telemetry__label">
-                {telemetryMode === "speed" ? copy.currentSpeed : copy.currentSpeedComponent}
-              </span>
-              <strong>{formatSpeedValue(telemetry.currentValue)}</strong>
-            </div>
-            <div className="scene-telemetry__metric">
-              <span className="scene-telemetry__label">{copy.speedDelta}</span>
-              <strong>{formatDeltaSpeed(telemetry.deltaValue)}</strong>
-            </div>
-          </div>
-
-          <SpeedTelemetryChart
-            points={telemetry.points}
-            selectedSampleIndex={selectedSampleIndex}
-            ariaLabel={copy.speedTelemetry}
+        {arrivalCaptureModel ? (
+          <span
+            hidden
+            data-testid="arrival-capture-orbit"
+            data-source={arrivalCaptureModel.source}
           />
-        </div>
+        ) : null}
+
+        <TrajectoryInsetMap model={insetMapModel} language={language} />
 
         {(activeManeuver || upcomingManeuver) ? (
           <div className="scene-maneuver-panel" aria-label={copy.maneuverEventsLabel}>
@@ -238,38 +450,6 @@ export default function SolarSystemScene({
           </div>
         ) : null}
 
-        {result.missionTimeline ? (
-          <div className="scene-phase-panel" aria-label={copy.phaseTimeline}>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.currentPhase}</span>
-              <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
-              <p>{currentPhase?.description ?? copy.currentEpochPending}</p>
-            </div>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.missionObjective}</span>
-              <strong>{result.missionTimeline.currentObjective ?? planetLabel(language, result.closestApproach.bodyId)}</strong>
-            </div>
-            <div className="scene-phase-panel__section">
-              <span className="scene-phase-panel__label">{copy.nextEvent}</span>
-              <strong>{nextEvent?.title ?? copy.noUpcomingEvent}</strong>
-              <p>
-                {nextEvent && currentEpoch
-                  ? `${formatTimeUntil(currentEpoch, nextEvent.epoch, language)} · ${nextEvent.description}`
-                  : copy.noUpcomingEvent}
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {activeSegmentDetail ? (
-          <div className="scene-phase-panel" aria-label={copy.missionSegments}>
-            <div className="scene-phase-panel__section" data-testid="active-segment-detail">
-              <span className="scene-phase-panel__label">{copy.missionSegments}</span>
-              <strong>{localizeMissionSegment(language, activeSegment?.segmentType ?? "")}</strong>
-              <p>{activeSegmentDetail}</p>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <div className="scene-body-list scene-body-list--inline" aria-label={copy.visibleBodies}>
@@ -297,181 +477,47 @@ export default function SolarSystemScene({
       </div>
 
       <div className="scene-shell__footer">
-        {result.missionTimeline ? (
-          <div className="scene-phase-timeline" aria-label={copy.phaseTimeline} data-testid="mission-phase-timeline">
-            <div className="scene-phase-timeline__header">
-              <span>{copy.phaseTimeline}</span>
-              <strong>{currentPhase?.title ?? copy.awaitingPropagation}</strong>
+        <div className="scene-shell__footer-main">
+          <div className="scene-shell__footer-controls">
+            <div className="scene-playback-actions">
+              <button type="button" className="scene-action-button" onClick={isPlaying ? onPause : onPlay}>
+                {isPlaying ? copy.pause : copy.start}
+              </button>
+              <button type="button" className="scene-action-button scene-action-button--ghost" onClick={onReset}>
+                {copy.reset}
+              </button>
             </div>
-            <div className="scene-phase-timeline__track">
-              {phaseSegments.map((phase, index) => (
-                <div
-                  key={phase.id}
-                  data-testid={`mission-phase-segment-${index}`}
-                  className="scene-phase-timeline__segment"
-                  data-active={phase.id === currentPhase?.id ? "true" : "false"}
-                  style={{
-                    width: `${phaseWidthPercent(
-                      phase.startEpoch,
-                      phase.endEpoch,
-                      result.missionTimeline?.missionStartEpoch ?? null,
-                      result.missionTimeline?.missionEndEpoch ?? null,
-                    )}%`,
-                  }}
-                  title={phase.title}
-                />
-              ))}
-              <span
-                className="scene-phase-timeline__cursor"
-                style={{ left: `${timelineSnapshot.progress * 100}%` }}
+
+            <label className="scene-slider">
+              <span>{copy.playbackStep}</span>
+              <input
+                aria-label={copy.playbackStep}
+                type="range"
+                min={0}
+                max={Math.max(result.samples.length - 1, 0)}
+                step={1}
+                value={selectedSampleIndex}
+                onChange={(event) => onSampleIndexChange(Number(event.target.value))}
               />
-            </div>
+            </label>
+
+            <label className="scene-slider scene-slider--compact">
+              <span>{copy.zoomLevel}</span>
+              <input
+                aria-label={copy.zoomLevel}
+                type="range"
+                min={MIN_ZOOM}
+                max={MAX_ZOOM}
+                step={0.05}
+                value={zoomLevel}
+                onChange={(event) => handleZoomChange(Number(event.target.value))}
+              />
+            </label>
           </div>
-        ) : null}
-
-        {result.segments?.length ? (
-          <div className="scene-phase-timeline" aria-label={copy.missionSegments}>
-            <div className="scene-phase-timeline__header">
-              <span>{copy.missionSegments}</span>
-              <strong>
-                {activeSegment ? localizeMissionSegment(language, activeSegment.segmentType) : copy.awaitingPropagation}
-              </strong>
-            </div>
-            <div className="scene-body-list scene-body-list--inline">
-              {result.segments.map((segment, index) => (
-                <div
-                  key={`${segment.segmentType}-${segment.startEpoch}`}
-                  className="scene-body-chip"
-                  data-active={segment.segmentType === activeSegment?.segmentType ? "true" : "false"}
-                  data-testid={`mission-segment-chip-${index}`}
-                >
-                  <span className="scene-body-chip__dot" aria-hidden="true" />
-                  <span>{localizeMissionSegment(language, segment.segmentType)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="scene-shell__footer-controls">
-          <div className="scene-playback-actions">
-            <button type="button" className="scene-action-button" onClick={isPlaying ? onPause : onPlay}>
-              {isPlaying ? copy.pause : copy.start}
-            </button>
-            <button type="button" className="scene-action-button scene-action-button--ghost" onClick={onReset}>
-              {copy.reset}
-            </button>
-          </div>
-
-          <label className="scene-slider">
-            <span>{copy.playbackStep}</span>
-            <input
-              aria-label={copy.playbackStep}
-              type="range"
-              min={0}
-              max={Math.max(result.samples.length - 1, 0)}
-              step={1}
-              value={selectedSampleIndex}
-              onChange={(event) => onSampleIndexChange(Number(event.target.value))}
-            />
-          </label>
-
-          <label className="scene-slider scene-slider--compact">
-            <span>{copy.zoomLevel}</span>
-            <input
-              aria-label={copy.zoomLevel}
-              type="range"
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
-              step={0.05}
-              value={zoomLevel}
-              onChange={(event) => handleZoomChange(Number(event.target.value))}
-            />
-          </label>
         </div>
 
-        <div className="scene-shell__footer-meta">
-          <div>
-            <span>{copy.currentSample}</span>
-            <strong>{selectedSampleIndex + 1}</strong>
-          </div>
-          <div>
-            <span>{copy.samples}</span>
-            <strong>{result.samples.length}</strong>
-          </div>
-          <div>
-            <span>{copy.warnings}</span>
-            <strong>{result.warnings.length}</strong>
-          </div>
-          {result.visitEvents?.length ? (
-            <div>
-              <span>{copy.visitEventsLabel}</span>
-              <strong>{result.visitEvents.length}</strong>
-            </div>
-          ) : null}
-          {result.maneuverEvents?.length ? (
-            <div>
-              <span>{copy.maneuverEventsLabel}</span>
-              <strong>{result.maneuverEvents.length}</strong>
-            </div>
-          ) : null}
-          <div>
-            <span>{copy.renderer}</span>
-            <strong>{renderMode === "webgl" ? copy.threeJs : copy.fallback}</strong>
-          </div>
-        </div>
       </div>
     </section>
-  );
-}
-
-type SpeedTelemetryChartProps = {
-  points: number[];
-  selectedSampleIndex: number;
-  ariaLabel: string;
-};
-
-function SpeedTelemetryChart({ points, selectedSampleIndex, ariaLabel }: SpeedTelemetryChartProps) {
-  if (points.length === 0) {
-    return null;
-  }
-
-  const width = 240;
-  const height = 92;
-  const padding = 10;
-  const safeIndex = Math.min(Math.max(selectedSampleIndex, 0), points.length - 1);
-  const minValue = Math.min(...points);
-  const maxValue = Math.max(...points);
-  const span = Math.max(maxValue - minValue, 1);
-  const stepX = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
-
-  const coordinates = points.map((value, index) => {
-    const x = padding + index * stepX;
-    const normalized = (value - minValue) / span;
-    const y = height - padding - normalized * (height - padding * 2);
-    return { x, y };
-  });
-
-  const polyline = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
-  const activePoint = coordinates[safeIndex];
-
-  return (
-    <svg
-      className="scene-telemetry__chart"
-      viewBox={`0 0 ${width} ${height}`}
-      aria-label={ariaLabel}
-      role="img"
-    >
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke="rgba(147, 231, 255, 0.95)"
-        strokeWidth="2.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx={activePoint.x} cy={activePoint.y} r="4.5" fill="#f7bf66" />
-    </svg>
   );
 }
 
@@ -488,67 +534,152 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2("#07111e", 0.0015);
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
-    camera.position.set(0, 260, 0.01);
-    camera.up.set(0, 0, -1);
+    const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 4000);
+    camera.position.set(0, 32, 84);
+    camera.up.set(0, 1, 0);
     camera.lookAt(0, 0, 0);
 
     const ambient = new THREE.AmbientLight("#8aa7d9", 1.9);
     const sunLight = new THREE.PointLight("#ffd49e", 3.2, 0, 1.5);
     sunLight.position.set(0, 0, 0);
 
-    const dynamicGroup = new THREE.Group();
+    const missionGroup = new THREE.Group();
+    const bodiesGroup = new THREE.Group();
+    const playbackGroup = new THREE.Group();
+    const probeVisual = createProbeVisual();
 
     scene.add(ambient);
     scene.add(sunLight);
-    scene.add(dynamicGroup);
+    scene.add(missionGroup);
+    scene.add(bodiesGroup);
+    scene.add(playbackGroup);
+    scene.add(probeVisual.group);
 
     const render = () => {
       renderer.render(scene, camera);
     };
 
+    const applyMotion = (motion: CameraMotionState) => {
+      camera.fov = motion.fovDeg;
+      camera.zoom = motion.zoom;
+      camera.position.set(motion.position[0], motion.position[1], motion.position[2]);
+      camera.lookAt(motion.lookAt[0], motion.lookAt[1], motion.lookAt[2]);
+      camera.updateProjectionMatrix();
+    };
+
+    const applyProbeMotion = (motion: ProbeMotionState) => {
+      probeVisual.group.visible = true;
+      probeVisual.group.position.set(motion.position[0], motion.position[1], motion.position[2]);
+      probeVisual.group.lookAt(
+        motion.position[0] + motion.forward[0],
+        motion.position[1] + motion.forward[1],
+        motion.position[2] + motion.forward[2],
+      );
+      probeVisual.engineGlowMaterial.emissiveIntensity = motion.engineGlowIntensity;
+      probeVisual.engineGlowMaterial.opacity =
+        motion.engineGlowIntensity <= 0.001 ? 0 : clamp(motion.engineGlowIntensity * 0.7, 0, 0.96);
+
+      for (const streak of probeVisual.streakMaterials) {
+        streak.material.opacity = motion.streakOpacity * streak.opacityScale;
+      }
+    };
+
+    const tick = () => {
+      let needsRender = false;
+
+      if (runtime.targetMotion) {
+        const nextMotion = runtime.currentMotion
+          ? advanceCameraMotion(runtime.currentMotion, runtime.targetMotion, 0.16)
+          : runtime.targetMotion;
+        if (nextMotion !== runtime.currentMotion) {
+          runtime.currentMotion = nextMotion;
+          applyMotion(runtime.currentMotion);
+          needsRender = true;
+        }
+      }
+
+      if (runtime.targetProbeMotion) {
+        const nextProbeMotion = runtime.currentProbeMotion
+          ? advanceProbeMotion(runtime.currentProbeMotion, runtime.targetProbeMotion, 0.22)
+          : runtime.targetProbeMotion;
+        if (nextProbeMotion !== runtime.currentProbeMotion) {
+          runtime.currentProbeMotion = nextProbeMotion;
+          applyProbeMotion(runtime.currentProbeMotion);
+          needsRender = true;
+        }
+      }
+
+      if (needsRender) {
+        render();
+      }
+      runtime.frameHandle = window.requestAnimationFrame(tick);
+    };
+
     const resize = () => {
       const width = Math.max(surface.clientWidth, 1);
       const height = Math.max(surface.clientHeight, 1);
-      const frustumHeight = runtime.frame.halfSpan * 2;
-      const aspect = width / height;
-      camera.left = (-frustumHeight * aspect) / 2;
-      camera.right = (frustumHeight * aspect) / 2;
-      camera.top = frustumHeight / 2;
-      camera.bottom = -frustumHeight / 2;
-      camera.position.set(runtime.frame.center.x, 260, runtime.frame.center.z + 0.01);
-      camera.lookAt(runtime.frame.center.x, 0, runtime.frame.center.z);
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
       render();
     };
 
     const runtime: SceneRuntime = {
+      bodiesGroup,
       camera,
-      dynamicGroup,
-      frame: {
-        center: { x: 0, z: 0 },
-        halfSpan: 60,
-      },
+      frameHandle: null,
+      currentMotion: null,
+      currentProbeMotion: null,
+      missionGroup,
+      playbackGroup,
+      probeVisual,
       renderer,
       render,
       resizeObserver: null,
       scene,
-      setFrame: (frame: BirdsEyeFrame) => {
-        runtime.frame = frame;
-        resize();
+      targetMotion: null,
+      targetProbeMotion: null,
+      setProbeTarget: (motion) => {
+        runtime.targetProbeMotion = motion;
+        if (!runtime.currentProbeMotion) {
+          runtime.currentProbeMotion = runtime.targetProbeMotion;
+          applyProbeMotion(runtime.currentProbeMotion);
+          render();
+        }
+      },
+      setView: (samplePositionKm, view, zoom, orbitState) => {
+        const frame = buildProbeCameraFrame(samplePositionKm, view, zoom, orbitState);
+
+        runtime.targetMotion = {
+          position: frame.position,
+          lookAt: frame.lookAt,
+          fovDeg: frame.fovDeg,
+          zoom: frame.zoom,
+        };
+        if (!runtime.currentMotion) {
+          runtime.currentMotion = runtime.targetMotion;
+          applyMotion(runtime.currentMotion);
+          render();
+        }
       },
       setZoom: (zoom: number) => {
-        camera.zoom = zoom;
-        camera.updateProjectionMatrix();
-        render();
+        if (runtime.targetMotion) {
+          runtime.targetMotion = {
+            ...runtime.targetMotion,
+            zoom,
+          };
+        }
       },
       stop: () => {
         runtime.resizeObserver?.disconnect();
+        if (runtime.frameHandle != null) {
+          window.cancelAnimationFrame(runtime.frameHandle);
+        }
       },
     };
 
     resize();
+    runtime.frameHandle = window.requestAnimationFrame(tick);
 
     const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
     resizeObserver?.observe(surface);
@@ -560,50 +691,114 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
   }
 }
 
-function syncSceneObjects(
+function syncMissionScene(
   runtime: SceneRuntime,
-  bodies: BodyState[],
   result: TrajectoryResult,
   launchEpoch: string | null,
-  selectedSampleIndex: number,
-  hoveredBodyId: string | null,
-  language: Language
-) {
-  clearGroup(runtime.dynamicGroup);
-  runtime.setFrame(computeBirdsEyeFrame(result.samples, bodies));
+  language: Language,
+  arrivalCaptureModel: ReturnType<typeof buildArrivalCaptureModel>,
+  displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
+){
+  clearGroup(runtime.missionGroup);
 
   const launchSample = result.samples[0];
   const closestSample = findSampleForEpoch(result, result.closestApproach.epochSeconds);
 
   if (launchSample) {
-    runtime.dynamicGroup.add(createAnchorMesh(launchSample.positionKm, "earth", "launch", language));
+    runtime.missionGroup.add(createAnchorMesh(launchSample.positionKm, "earth", "launch", language));
   }
   if (closestSample) {
-    runtime.dynamicGroup.add(
+    runtime.missionGroup.add(
       createAnchorMesh(closestSample.positionKm, result.closestApproach.bodyId, "arrival", language)
     );
   }
   for (const flybyEvent of result.flybyEvents ?? []) {
-    runtime.dynamicGroup.add(createFlybyMarker(flybyEvent.positionKm, flybyEvent.bodyId, language));
+    runtime.missionGroup.add(createFlybyMarker(flybyEvent.positionKm, flybyEvent.bodyId, language));
   }
   for (const visitEvent of result.visitEvents ?? []) {
-    runtime.dynamicGroup.add(createVisitMarker(visitEvent.positionKm, visitEvent.bodyId, language));
+    runtime.missionGroup.add(createVisitMarker(visitEvent.positionKm, visitEvent.bodyId, language));
   }
   if (launchEpoch) {
     for (const maneuverEvent of result.maneuverEvents ?? []) {
       const maneuverSample = findSampleForEventEpoch(result, launchEpoch, maneuverEvent.startEpoch);
       if (maneuverSample) {
-        runtime.dynamicGroup.add(createManeuverMarker(maneuverSample.positionKm, maneuverEvent.type, language));
+        runtime.missionGroup.add(createManeuverMarker(maneuverSample.positionKm, maneuverEvent.type, language));
       }
     }
   }
-  runtime.dynamicGroup.add(createTrajectoryLine(result.samples, "#8fe3ff", 0.22));
-  runtime.dynamicGroup.add(createTrajectoryLine(result.samples.slice(0, selectedSampleIndex + 1), "#8fe3ff", 0.96));
-  runtime.dynamicGroup.add(createTrajectoryMarkers(result.samples.slice(0, selectedSampleIndex + 1)));
-  runtime.dynamicGroup.add(createProbeMarker(result.samples[selectedSampleIndex]));
+
+  const missionTrajectorySamples = buildDisplayTrajectorySamples(
+    result.samples,
+    result.closestApproach.epochSeconds,
+    displayedCapturePathPoints,
+    closestSample?.positionKm ?? null,
+  );
+  runtime.missionGroup.add(createTrajectoryLine(missionTrajectorySamples, "#8fe3ff", 0.22));
+  if (displayedCapturePathPoints && closestSample) {
+    runtime.missionGroup.add(
+      createCaptureOrbitLine(displayedCapturePathPoints, closestSample.positionKm, "#ffd59a", 0.88),
+    );
+  }
+  runtime.render();
+}
+
+function syncPlaybackScene(
+  runtime: SceneRuntime,
+  bodies: BodyState[],
+  result: TrajectoryResult,
+  hoveredBodyId: string | null,
+  language: Language,
+  cameraView: ProbeCameraView | null,
+  zoomLevel: number,
+  orbitCameraState: OrbitCameraState,
+  activeSample: TrajectoryResult["samples"][number],
+  displayedPathSamples: TrajectoryResult["samples"],
+  currentEpoch: string | null,
+  arrivalCaptureModel: ReturnType<typeof buildArrivalCaptureModel>,
+  displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
+) {
+  clearGroup(runtime.playbackGroup);
+  clearGroup(runtime.bodiesGroup);
+
+  if (activeSample && cameraView) {
+    runtime.setView(
+      activeSample.positionKm,
+      cameraView,
+      zoomLevel,
+      orbitCameraState,
+    );
+    runtime.setProbeTarget(buildProbeMotionState(activeSample, currentEpoch, result.maneuverEvents));
+  } else {
+    runtime.probeVisual.group.visible = false;
+    runtime.currentProbeMotion = null;
+    runtime.targetProbeMotion = null;
+  }
+
+  const captureCenter = bodies.find((body) => body.bodyId === arrivalCaptureModel?.bodyId)?.positionKm ?? null;
+  const playbackTrajectorySamples = buildDisplayTrajectorySamples(
+    displayedPathSamples,
+    result.closestApproach.epochSeconds,
+    displayedCapturePathPoints,
+    captureCenter,
+  );
+
+  runtime.playbackGroup.add(createTrajectoryLine(playbackTrajectorySamples, "#8fe3ff", 0.96));
+  runtime.playbackGroup.add(createTrajectoryMarkers(playbackTrajectorySamples));
+  if (displayedCapturePathPoints && captureCenter) {
+    runtime.playbackGroup.add(
+      createCaptureOrbitLine(displayedCapturePathPoints, captureCenter, "#ffd59a", 0.96),
+    );
+  }
 
   for (const body of bodies) {
-    runtime.dynamicGroup.add(createBodyMesh(body, hoveredBodyId === body.bodyId));
+    runtime.bodiesGroup.add(
+      createBodyMesh(
+        body,
+        hoveredBodyId === body.bodyId,
+        body.bodyId === cameraView?.focusBodyId || body.bodyId === result.closestApproach.bodyId,
+        body.bodyId === cameraView?.focusBodyId ? cameraView.focusBodyScale : 1,
+      ),
+    );
   }
 
   runtime.render();
@@ -637,6 +832,30 @@ function clearGroup(group: THREE.Group) {
   }
 }
 
+function buildDisplayTrajectorySamples(
+  samples: TrajectoryResult["samples"],
+  closestApproachEpochSeconds: number,
+  displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
+  captureCenter: [number, number, number] | null,
+) {
+  if (!displayedCapturePathPoints || !captureCenter || samples.length === 0 || displayedCapturePathPoints.length === 0) {
+    return samples;
+  }
+
+  const closestIndex = samples.findIndex((sample) => sample.epochSeconds === closestApproachEpochSeconds);
+  if (closestIndex === -1) {
+    return samples;
+  }
+
+  const captureStartPoint = translateCapturePoint(displayedCapturePathPoints[0], captureCenter);
+  const captureStartSample = {
+    ...samples[closestIndex],
+    positionKm: captureStartPoint,
+  };
+
+  return [...samples.slice(0, closestIndex), captureStartSample];
+}
+
 function createTrajectoryLine(
   samples: TrajectoryResult["samples"],
   color: string,
@@ -652,6 +871,22 @@ function createTrajectoryLine(
   return new THREE.Line(geometry, material);
 }
 
+function createCaptureOrbitLine(
+  pathPoints: Array<[number, number, number]>,
+  centerPositionKm: [number, number, number],
+  color: string,
+  opacity: number,
+) {
+  const translatedPoints = pathPoints.map((point) => toThreeVector(translateCapturePoint(point, centerPositionKm)));
+  const geometry = new THREE.BufferGeometry().setFromPoints(translatedPoints);
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+  });
+  return new THREE.LineLoop(geometry, material);
+}
+
 function createTrajectoryMarkers(samples: TrajectoryResult["samples"]) {
   const points = samples.map((sample) => toThreeVector(sample.positionKm));
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -665,18 +900,114 @@ function createTrajectoryMarkers(samples: TrajectoryResult["samples"]) {
   return new THREE.Points(geometry, material);
 }
 
-function createProbeMarker(sample: TrajectoryResult["samples"][number] | undefined) {
-  const geometry = new THREE.SphereGeometry(1.6, 20, 20);
-  const material = new THREE.MeshStandardMaterial({
-    color: "#8fe3ff",
-    emissive: "#54d2ff",
-    emissiveIntensity: 1.1,
+function translateCapturePoint(
+  localPoint: [number, number, number],
+  centerPositionKm: [number, number, number],
+): [number, number, number] {
+  return [
+    centerPositionKm[0] + localPoint[0],
+    centerPositionKm[1] + localPoint[1],
+    centerPositionKm[2] + localPoint[2],
+  ];
+}
+
+function createProbeVisual(): ProbeVisualRuntime {
+  const group = new THREE.Group();
+  const orientedGroup = new THREE.Group();
+  orientedGroup.rotation.y = PROBE_MODEL_ALIGNMENT_YAW_RAD;
+  group.add(orientedGroup);
+
+  const modelGroup = new THREE.Group();
+  modelGroup.scale.setScalar(PROBE_VISUAL_SCALE);
+  orientedGroup.add(modelGroup);
+
+  const effectsGroup = new THREE.Group();
+  effectsGroup.scale.setScalar(PROBE_EFFECTS_SCALE);
+  orientedGroup.add(effectsGroup);
+
+  const bus = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.75, 0.95, 4.4, 12),
+    new THREE.MeshStandardMaterial({
+      color: "#c8d6e8",
+      emissive: "#8fe3ff",
+      emissiveIntensity: 0.28,
+      metalness: 0.52,
+      roughness: 0.46,
+    }),
+  );
+  bus.rotation.z = Math.PI / 2;
+  modelGroup.add(bus);
+
+  const dish = new THREE.Mesh(
+    new THREE.SphereGeometry(1.35, 18, 18, 0, Math.PI),
+    new THREE.MeshStandardMaterial({
+      color: "#edf4fb",
+      emissive: "#69bfff",
+      emissiveIntensity: 0.15,
+      metalness: 0.1,
+      roughness: 0.28,
+      side: THREE.DoubleSide,
+    }),
+  );
+  dish.position.x = -2.2;
+  dish.rotation.z = -Math.PI / 2;
+  modelGroup.add(dish);
+
+  const panelMaterial = new THREE.MeshStandardMaterial({
+    color: "#4e86c8",
+    emissive: "#1b4576",
+    emissiveIntensity: 0.48,
+    metalness: 0.28,
+    roughness: 0.42,
   });
-  const mesh = new THREE.Mesh(geometry, material);
-  if (sample) {
-    mesh.position.copy(toThreeVector(sample.positionKm));
+  const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 4.8), panelMaterial);
+  leftPanel.position.set(0, 0, 3.6);
+  modelGroup.add(leftPanel);
+  const rightPanel = leftPanel.clone();
+  rightPanel.position.set(0, 0, -3.6);
+  modelGroup.add(rightPanel);
+
+  const engineGlowMaterial = new THREE.MeshStandardMaterial({
+    color: "#f7bf66",
+    emissive: "#f7bf66",
+    emissiveIntensity: 0.72,
+    transparent: true,
+    opacity: 0.92,
+  });
+  const engineGlow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.6, 1.8, 18),
+    engineGlowMaterial,
+  );
+  engineGlow.position.x = 2.6;
+  engineGlow.rotation.z = -Math.PI / 2;
+  effectsGroup.add(engineGlow);
+
+  const streakMaterials: ProbeVisualRuntime["streakMaterials"] = [];
+  const streakCount = 10;
+  for (let index = 0; index < streakCount; index += 1) {
+    const offset = (index - (streakCount - 1) / 2) * 1.3;
+    const start = new THREE.Vector3(offset, 0.18, 4.4 + index * 0.8);
+    const end = new THREE.Vector3(offset, 0.18, 9 + index * 1.05);
+    const material = new THREE.LineBasicMaterial({
+      color: "#8fe3ff",
+      transparent: true,
+      opacity: 0.18,
+    });
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    effectsGroup.add(new THREE.Line(geometry, material));
+    streakMaterials.push({
+      material,
+      opacityScale: 1 - index * 0.06,
+    });
   }
-  return mesh;
+
+  group.visible = false;
+
+  return {
+    engineGlowMaterial,
+    group,
+    streakMaterials,
+  };
 }
 
 function createAnchorMesh(
@@ -740,35 +1071,97 @@ function createAnchorMesh(
   return group;
 }
 
-function createBodyMesh(body: BodyState, isHighlighted: boolean) {
+function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
   const radius = bodyRadii[body.bodyId] ?? 1.8;
   const group = new THREE.Group();
+  const focusVisual = isFocusBody ? computeFocusBodyVisualProfile(body.bodyId, focusScale >= 2 ? "flyby-emphasis" : focusScale > 1 ? "approach-emphasis" : "cruise-follow") : null;
+  const ringProfile = getPlanetaryRingProfile(body.bodyId);
   const geometry = new THREE.SphereGeometry(radius, 24, 24);
   const material = new THREE.MeshStandardMaterial({
     color: bodyColors[body.bodyId] ?? "#f5f3ed",
-    emissive: body.bodyId === "sun" || isHighlighted ? bodyColors[body.bodyId] ?? "#f5f3ed" : "#000000",
-    emissiveIntensity: body.bodyId === "sun" ? 1.6 : isHighlighted ? 1.15 : 0,
+    emissive: body.bodyId === "sun" || isHighlighted || isFocusBody ? bodyColors[body.bodyId] ?? "#f5f3ed" : "#000000",
+    emissiveIntensity: body.bodyId === "sun" ? 1.6 : isFocusBody ? 1.35 : isHighlighted ? 1.15 : 0,
     metalness: 0.1,
     roughness: 0.8,
   });
   const mesh = new THREE.Mesh(geometry, material);
-  const orbitMarker = new THREE.Mesh(
-    new THREE.RingGeometry(radius * 1.35, radius * 1.7, 40),
+
+  group.position.copy(toThreeVector(body.positionKm));
+  group.add(mesh);
+  if (ringProfile) {
+    group.add(createPlanetaryRing(radius, ringProfile));
+  }
+  if (isFocusBody && body.bodyId !== "sun") {
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * (focusVisual?.haloScale ?? 1.18), 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: focusVisual?.atmosphereColor ?? bodyColors[body.bodyId] ?? "#f5f3ed",
+        transparent: true,
+        opacity: focusVisual?.haloOpacity ?? 0.12,
+        side: THREE.DoubleSide,
+      }),
+    );
+    group.add(halo);
+
+    const atmosphere = new THREE.Mesh(
+      new THREE.SphereGeometry(radius * ((focusVisual?.haloScale ?? 1.18) + 0.06), 24, 24),
+      new THREE.MeshBasicMaterial({
+        color: focusVisual?.atmosphereColor ?? bodyColors[body.bodyId] ?? "#f5f3ed",
+        transparent: true,
+        opacity: focusVisual?.atmosphereOpacity ?? 0.08,
+        side: THREE.DoubleSide,
+      }),
+    );
+    group.add(atmosphere);
+
+    if ((focusVisual?.bandCount ?? 0) > 0) {
+      group.add(createGasGiantBands(radius, focusVisual?.bandCount ?? 0, focusVisual?.bandOpacity ?? 0.12));
+    }
+  }
+  if (isHighlighted || isFocusBody) {
+    group.scale.setScalar(isFocusBody ? focusScale : 1.2);
+  }
+  return group;
+}
+
+function createPlanetaryRing(
+  radius: number,
+  ringProfile: ReturnType<typeof getPlanetaryRingProfile> extends infer T ? Exclude<T, null> : never,
+) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius * ringProfile.innerScale, radius * ringProfile.outerScale, 64),
     new THREE.MeshBasicMaterial({
-      color: bodyColors[body.bodyId] ?? "#f5f3ed",
+      color: ringProfile.color,
       transparent: true,
-      opacity: body.bodyId === "sun" ? 0.22 : 0.34,
+      opacity: ringProfile.opacity,
       side: THREE.DoubleSide,
     }),
   );
-  orbitMarker.rotation.x = -Math.PI / 2;
+  ring.rotation.x = Math.PI / 2;
+  ring.rotation.z = ringProfile.tiltRad;
+  return ring;
+}
 
-  group.position.copy(toThreeVector(body.positionKm));
-  group.add(orbitMarker);
-  group.add(mesh);
-  if (isHighlighted) {
-    group.scale.setScalar(1.2);
+function createGasGiantBands(radius: number, bandCount: number, opacity: number) {
+  const group = new THREE.Group();
+
+  for (let index = 0; index < bandCount; index += 1) {
+    const normalized = bandCount === 1 ? 0 : index / (bandCount - 1);
+    const yOffset = (normalized - 0.5) * radius * 1.15;
+    const ringRadius = Math.max(radius * (0.64 - Math.abs(normalized - 0.5) * 0.26), radius * 0.38);
+    const band = new THREE.Mesh(
+      new THREE.TorusGeometry(ringRadius, 0.09, 10, 48),
+      new THREE.MeshBasicMaterial({
+        color: "#f6e2bf",
+        transparent: true,
+        opacity,
+      }),
+    );
+    band.rotation.x = Math.PI / 2;
+    band.position.y = yOffset;
+    group.add(band);
   }
+
   return group;
 }
 
@@ -897,8 +1290,41 @@ function toThreeVector(positionKm: [number, number, number]) {
   );
 }
 
+function toThreeDirection(direction: [number, number, number]) {
+  const vector = new THREE.Vector3(direction[0], direction[2] * 0.45, direction[1]).normalize();
+  if (vector.lengthSq() === 0) {
+    return new THREE.Vector3(0, 0, 1);
+  }
+  return vector;
+}
+
+function buildProbeMotionState(
+  sample: TrajectoryResult["samples"][number],
+  currentEpoch: string | null,
+  maneuverEvents: ManeuverEvent[] | undefined,
+): ProbeMotionState {
+  const thrustState = resolveProbeThrustState(currentEpoch, maneuverEvents);
+  const attitudeDirection = resolveProbeAttitudeDirection(sample, thrustState.thrustDirection);
+  const forward = toThreeDirection(attitudeDirection);
+
+  return {
+    position: vectorToTuple(toThreeVector(sample.positionKm)),
+    forward: vectorToTuple(forward),
+    engineGlowIntensity: thrustState.engineGlowIntensity,
+    streakOpacity: thrustState.streakOpacity,
+  };
+}
+
+function vectorToTuple(vector: THREE.Vector3): [number, number, number] {
+  return [vector.x, vector.y, vector.z];
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function measureTouchDistance(left: Touch, right: Touch) {
+  return Math.hypot(right.clientX - left.clientX, right.clientY - left.clientY);
 }
 
 function formatDurationSeconds(seconds: number) {
@@ -926,23 +1352,24 @@ function formatTimeUntil(currentEpoch: string, eventEpoch: string, language: Lan
   return language === "zh" ? `${hours.toFixed(1)} 小时后` : `in ${hours.toFixed(1)} hours`;
 }
 
-function phaseWidthPercent(
-  startEpoch: string,
-  endEpoch: string,
-  missionStartEpoch: string | null,
-  missionEndEpoch: string | null,
-) {
-  if (!missionStartEpoch || !missionEndEpoch) {
-    return 0;
+function formatProbeViewMode(mode: ProbeCameraView["mode"], language: Language) {
+  if (language === "zh") {
+    if (mode === "flyby-emphasis") {
+      return "飞越增强视角";
+    }
+    if (mode === "approach-emphasis") {
+      return "目标接近视角";
+    }
+    return "混合跟随视角";
   }
 
-  const missionStart = new Date(missionStartEpoch).getTime();
-  const missionEnd = new Date(missionEndEpoch).getTime();
-  const phaseStart = new Date(startEpoch).getTime();
-  const phaseEnd = new Date(endEpoch).getTime();
-  const total = Math.max(missionEnd - missionStart, 1);
-  const width = Math.max(phaseEnd - phaseStart, 0);
-  return (width / total) * 100;
+  if (mode === "flyby-emphasis") {
+    return "Flyby emphasis";
+  }
+  if (mode === "approach-emphasis") {
+    return "Approach emphasis";
+  }
+  return "Hybrid follow view";
 }
 
 function findActiveManeuver(maneuverEvents: ManeuverEvent[] | undefined, currentEpoch: string | null) {
@@ -990,36 +1417,6 @@ function findActiveSegment(segments: MissionSegment[], currentEpoch: string | nu
       return currentTimeMs >= startMs && currentTimeMs <= endMs;
     }) ?? segments[0]
   );
-}
-
-function formatActiveSegmentDetail(segment: MissionSegment | null, language: Language) {
-  if (!segment) {
-    return null;
-  }
-
-  const copy = t(language);
-
-  if (segment.segmentType === "gravityAssistFlyby" && segment.metadata?.bodyId) {
-    const bodyLabel = planetLabel(language, segment.metadata.bodyId);
-    const turnAngle = segment.metadata.turnAngleDeg != null ? `${copy.turnAngle}: ${segment.metadata.turnAngleDeg} deg` : null;
-    const periapsis =
-      segment.metadata.periapsisAltitudeKm != null
-        ? `${copy.periapsisAltitude}: ${Math.round(segment.metadata.periapsisAltitudeKm).toLocaleString("en-US")} km`
-        : null;
-    return [bodyLabel, turnAngle, periapsis].filter(Boolean).join(" · ");
-  }
-
-  if (segment.segmentType === "heliocentricCruise") {
-    const maneuverCount =
-      segment.metadata?.maneuverCount != null ? `${copy.maneuversLabel}: ${segment.metadata.maneuverCount}` : null;
-    const propellant =
-      segment.massSummary?.propellantUsedKg != null
-        ? `${copy.propellantUsed}: ${Math.round(segment.massSummary.propellantUsedKg).toLocaleString("en-US")} kg`
-        : null;
-    return [maneuverCount, propellant].filter(Boolean).join(" · ");
-  }
-
-  return null;
 }
 
 function createAnchorLabel(text: string, color: THREE.Color) {

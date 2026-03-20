@@ -7,6 +7,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function hasExactTextContent(text: string) {
+  return (_content: string, node: Element | null) => node?.textContent === text;
+}
+
 it("renders the simulator heading", () => {
   render(<App />);
   expect(screen.getByText("太阳系轨迹模拟器")).toBeInTheDocument();
@@ -117,6 +121,57 @@ it("shows the mission metrics panel after propagation results load", async () =>
                 velocityKmPerSec: [-0.1, 29.77, 0]
               },
               events: []
+            },
+            {
+              segmentType: "arrivalCapture",
+              startEpoch: "2026-01-04T00:00:00.000Z",
+              endEpoch: "2026-01-04T06:00:00.000Z",
+              samples: [
+                {
+                  epochSeconds: 0,
+                  positionKm: [4200, 0, 0],
+                  velocityKmPerSec: [0, 3.4, 0]
+                },
+                {
+                  epochSeconds: 1800,
+                  positionKm: [2100, 0, 3600],
+                  velocityKmPerSec: [-2.4, 0.6, 1.1]
+                },
+                {
+                  epochSeconds: 3600,
+                  positionKm: [-1800, 0, 3900],
+                  velocityKmPerSec: [-2.6, -0.4, 0.5]
+                },
+                {
+                  epochSeconds: 5400,
+                  positionKm: [-1200, 0, 4700],
+                  velocityKmPerSec: [-2.8, -0.2, 0.3]
+                }
+              ],
+              initialState: {
+                epoch: "2026-01-04T00:00:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [4200, 0, 0],
+                velocityKmPerSec: [0, 3.4, 0]
+              },
+              finalState: {
+                epoch: "2026-01-04T06:00:00.000Z",
+                referenceFrame: "mars-centered-inertial",
+                referenceBodyId: "mars",
+                positionKm: [0, 0, 4200],
+                velocityKmPerSec: [-3.4, 0, 0]
+              },
+              events: [],
+              orbitSummary: {
+                isBound: true,
+                periapsisKm: 4200,
+                apoapsisKm: 7200,
+                inclinationDeg: 25
+              },
+              metadata: {
+                bodyId: "mars"
+              }
             }
           ],
           missionTimeline: {
@@ -262,11 +317,11 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByLabelText("Three.js 飞行画布")).toBeInTheDocument();
   expect(await screen.findByLabelText("缩放")).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "开始" })).toBeInTheDocument();
-  expect(await screen.findByText("当前阶段")).toBeInTheDocument();
-  expect(await screen.findByText("下一事件")).toBeInTheDocument();
-  expect(await screen.findByTestId("mission-phase-timeline")).toBeInTheDocument();
-  expect(screen.getAllByTestId(/mission-phase-segment-/).length).toBeGreaterThan(1);
-  expect((await screen.findAllByText("任务分段")).length).toBeGreaterThan(0);
+  expect(await screen.findByTestId("trajectory-inset-map")).toBeInTheDocument();
+  expect(await screen.findByTestId("arrival-capture-orbit")).toHaveAttribute("data-source", "segment-samples");
+  expect(await screen.findByText("当前目标: Arrive at Mars")).toBeInTheDocument();
+  expect(await screen.findByText("下一事件: Mars Approach · 1.5 天后")).toBeInTheDocument();
+  expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 火星"))).toBeInTheDocument();
   expect((await screen.findAllByText("停泊轨道")).length).toBeGreaterThan(0);
   expect((await screen.findAllByText("地球逃逸")).length).toBeGreaterThan(0);
   expect(
@@ -488,19 +543,20 @@ it("renders gravity-assist candidates and switches the active plan", async () =>
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
   expect(await screen.findByText("引力辅助候选方案")).toBeInTheDocument();
+  expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 木星 -> 土星"))).toBeInTheDocument();
   expect(await screen.findByText("地球 -> 木星 -> 土星")).toBeInTheDocument();
   expect(await screen.findByText("地球 -> 金星 -> 木星 -> 土星")).toBeInTheDocument();
   expect(await screen.findByText("200 天")).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 金星 -> 木星 -> 土星/ }));
 
+  expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 金星 -> 木星 -> 土星"))).toBeInTheDocument();
   expect(await screen.findByText("240 天")).toBeInTheDocument();
-  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("转向角");
-  expect(await screen.findByTestId("active-segment-detail")).toHaveTextContent("木星");
+  expect(await screen.findByTestId("trajectory-inset-map")).toHaveTextContent("木星");
 });
 
-it("plans a multi-planet tour and renders ranked tour candidates", async () => {
-  vi.spyOn(globalThis, "fetch")
+it("plans a multi-planet tour from the unified selector and renders ranked tour candidates", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -642,14 +698,35 @@ it("plans a multi-planet tour and renders ranked tour candidates", async () => {
     );
 
   render(<App />);
-  await userEvent.selectOptions(screen.getByLabelText("任务类型"), "tour");
+  await userEvent.click(screen.getByRole("checkbox", { name: "火星" }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "金星" }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "木星" }));
+  await userEvent.click(screen.getByRole("checkbox", { name: "土星" }));
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
+  expect(fetchSpy).toHaveBeenNthCalledWith(
+    1,
+    "/missions/plan-tour",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({
+        departureBody: "earth",
+        requiredVisitBodies: ["venus", "jupiter", "saturn"],
+        launchEpoch: "2026-01-01T00:00:00Z",
+        maxAssistBodiesPerLeg: 2,
+        maxReturnedCandidates: 5,
+        allowAssistBodies: true,
+        allowRepeatedFlybys: true
+      })
+    }),
+  );
+
   expect(await screen.findByText("引力辅助候选方案")).toBeInTheDocument();
-  expect(await screen.findByText("地球 -> 金星 -> 地球 -> 木星 -> 土星")).toBeInTheDocument();
+  expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 金星 -> 木星 -> 土星"))).toBeInTheDocument();
+  expect((await screen.findAllByText(hasExactTextContent("完整序列: 地球 -> 金星 -> 地球 -> 木星 -> 土星"))).length).toBeGreaterThan(0);
   expect(await screen.findByText(/拜访顺序: 金星 -> 木星 -> 土星/)).toBeInTheDocument();
   expect(await screen.findByText("900 天")).toBeInTheDocument();
-  expect(await screen.findByText("拜访事件")).toBeInTheDocument();
+  expect(await screen.findByText("当前方案")).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 木星 -> 金星 -> 土星/ }));
 
@@ -736,14 +813,10 @@ it("shows speed telemetry in the scene and switches components", async () => {
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
-  expect(await screen.findByText("速度遥测")).toBeInTheDocument();
-  expect(await screen.findByText("当前速度")).toBeInTheDocument();
-  expect(await screen.findByText("29.78 km/s")).toBeInTheDocument();
-
-  await userEvent.click(screen.getByRole("button", { name: "vx" }));
-
-  expect(await screen.findByText("当前速度分量")).toBeInTheDocument();
-  expect(await screen.findByText("0.00 km/s")).toBeInTheDocument();
+  expect(await screen.findByText("当前速度: 29.78 km/s")).toBeInTheDocument();
+  expect(screen.queryByText("速度遥测")).not.toBeInTheDocument();
+  expect(screen.queryByText("当前速度分量")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "vx" })).not.toBeInTheDocument();
 });
 
 it("renders maneuver markers and highlights active burn windows during playback", async () => {
@@ -883,7 +956,6 @@ it("renders maneuver markers and highlights active burn windows during playback"
   render(<App />);
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
-  expect(await screen.findByText("机动事件")).toBeInTheDocument();
   expect(await screen.findByText("下一次机动")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("回放步进"), { target: { value: "1" } });
