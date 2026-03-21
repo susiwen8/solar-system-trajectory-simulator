@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.config import TrajectorySettings
 from app.data.horizons_client import HorizonsClient
-from app.mission.models import MissionRequest
+from app.mission.models import MissionRequest, parse_timestamp
 from app.mission.sampling import sample_candidate
 from app.mission.search import MissionSearchService
 from app.services.ephemeris_service import EphemerisService
@@ -50,9 +50,26 @@ def solve_mission(
             "No feasible route found in this launch window. Try widening the departure range or increasing maximum mission duration."
         )
 
+    body_samples = {}
+    for body_id in [request.origin, *request.targets]:
+        result = mission_search_service.ephemeris_service.get_vectors(
+            body_id,
+            request.launch_window_start,
+            request.launch_window_end,
+            "30d",
+        )
+        body_samples[body_id] = [
+            {
+                "timestamp": parse_timestamp(record["timestamp"]).timestamp(),
+                "positionKm": record["position_km"],
+            }
+            for record in result.records
+        ]
+
     return {
         "candidates": serialized_candidates,
         "relevantBodies": [request.origin, *request.targets],
+        "bodySamples": body_samples,
         "fidelity": {
             "ephemeris": "high",
             "transfer": "engineering approximation",
@@ -60,4 +77,3 @@ def solve_mission(
         },
         "warnings": warnings,
     }
-

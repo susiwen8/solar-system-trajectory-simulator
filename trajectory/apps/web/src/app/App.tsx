@@ -58,6 +58,7 @@ export function App() {
       missionStore.setCandidates(response.candidates);
       missionStore.setWarnings(response.warnings);
       missionStore.setFidelity(response.fidelity);
+      missionStore.setBodySamples(response.bodySamples ?? {});
     } finally {
       setIsLoading(false);
     }
@@ -71,6 +72,7 @@ export function App() {
       <main className="center-panel">
         <SceneRoot
           bodies={state.bodies}
+          bodySamples={state.bodySamples}
           candidate={selectedCandidate}
           cameraMode={state.cameraMode}
           playbackTimeSeconds={state.playback.currentTimeSeconds}

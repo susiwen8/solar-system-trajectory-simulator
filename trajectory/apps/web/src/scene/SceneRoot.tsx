@@ -9,6 +9,7 @@ import { TrajectoryLine } from "./TrajectoryLine";
 
 type SceneRootProps = {
   bodies: BodyOption[];
+  bodySamples: Record<string, SpacecraftSample[]>;
   candidate: MissionCandidate | null;
   cameraMode: CameraMode;
   playbackTimeSeconds: number;
@@ -36,6 +37,7 @@ function getCurrentSample(
 
 export function SceneRoot({
   bodies,
+  bodySamples,
   candidate,
   cameraMode,
   playbackTimeSeconds,
@@ -55,7 +57,11 @@ export function SceneRoot({
       <Canvas camera={{ position: [3, 3, 3], fov: 50 }}>
         <color attach="background" args={["#050816"]} />
         <ambientLight intensity={1.2} />
-        <BodyLayer bodies={bodies} />
+        <BodyLayer
+          bodies={bodies}
+          bodySamples={bodySamples}
+          playbackTimeSeconds={playbackTimeSeconds}
+        />
         <TrajectoryLine samples={spacecraftSamples} />
         <SpacecraftMarker
           positionKm={currentSample?.positionKm ?? null}

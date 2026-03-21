@@ -4,6 +4,7 @@ type CameraMode = "overview" | "first_person";
 
 type MissionStoreState = {
   bodies: BodyOption[];
+  bodySamples: Record<string, { timestamp: number; positionKm: number[] }[]>;
   candidates: MissionCandidate[];
   selectedCandidateId: string | null;
   playback: {
@@ -30,6 +31,7 @@ function getRecommendedCandidateId(candidates: MissionCandidate[]): string | nul
 export function createMissionStore() {
   let state: MissionStoreState = {
     bodies: [],
+    bodySamples: {},
     candidates: [],
     selectedCandidateId: null,
     playback: {
@@ -59,6 +61,13 @@ export function createMissionStore() {
 
     setBodies(bodies: BodyOption[]) {
       state = { ...state, bodies };
+      emit();
+    },
+
+    setBodySamples(
+      bodySamples: Record<string, { timestamp: number; positionKm: number[] }[]>
+    ) {
+      state = { ...state, bodySamples };
       emit();
     },
 
@@ -129,4 +138,3 @@ export function createMissionStore() {
 }
 
 export type { CameraMode, MissionStoreState };
-

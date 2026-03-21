@@ -35,6 +35,7 @@ export type SolveMissionResponse = {
     flyby: string;
   };
   relevantBodies?: string[];
+  bodySamples?: Record<string, SpacecraftSample[]>;
 };
 
 export type MissionSolveInput = {
@@ -106,7 +107,8 @@ export const apiClient = {
         transfer: "unknown",
         flyby: "unknown"
       },
-      relevantBodies: payload.relevantBodies ?? []
+      relevantBodies: payload.relevantBodies ?? [],
+      bodySamples: payload.bodySamples ?? {}
     };
   }
 };
