@@ -8,4 +8,4 @@ web-dev:
 	@if [ -d apps/web ]; then cd apps/web && npm run dev; else echo "apps/web is not bootstrapped yet"; fi
 
 web-test:
-	cd apps/web && npm run test -- --run
+	@if [ -d apps/web ]; then cd apps/web && npm run test -- --run; else echo "apps/web is not bootstrapped yet"; fi

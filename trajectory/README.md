@@ -6,8 +6,8 @@ Trajectory is a mission-design-inspired space trajectory visualizer prototype.
 
 - Backend dev server: `make api-dev`
 - Backend tests: `make api-test`
-- Frontend dev server: `make web-dev`
-- Frontend tests: `make web-test`
+- Frontend dev server: `make web-dev` once `apps/web` is bootstrapped
+- Frontend tests: `make web-test` once `apps/web` is bootstrapped
 
 ## Scientific Fidelity
 
