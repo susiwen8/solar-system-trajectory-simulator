@@ -562,7 +562,7 @@ The first version is successful if:
 
 ## Open Design Constraints for Planning
 
-These are not unresolved TODOs. They are explicit implementation choices that
+These are not unresolved placeholders. They are explicit implementation choices that
 the planning phase must turn into concrete tasks:
 
 - how non-spherical or sparsely characterized dwarf planets should be given a
