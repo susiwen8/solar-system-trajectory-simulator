@@ -4,6 +4,8 @@ import type { MissionSegment, TrajectoryResult } from "../../mission/types";
 import {
   buildArrivalCaptureModel,
   buildDisplayCapturePathPoints,
+  estimateArrivalCaptureOrbitDurationSeconds,
+  sampleArrivalCaptureOrbit,
 } from "./arrival-capture";
 
 function buildSegment(overrides: Partial<MissionSegment>): MissionSegment {
@@ -106,6 +108,7 @@ describe("buildArrivalCaptureModel", () => {
 
     expect(model).not.toBeNull();
     expect(model?.source).toBe("segment-samples");
+    expect(model?.durationSeconds).toBe(3600);
     expect(model?.pathPoints).toEqual(sampledOrbit.samples.map((sample) => sample.positionKm));
   });
 
@@ -136,6 +139,7 @@ describe("buildArrivalCaptureModel", () => {
 
     expect(model).not.toBeNull();
     expect(model?.bodyId).toBe("mars");
+    expect(model?.durationSeconds).toBeNull();
     expect(model?.pathPoints.length).toBeGreaterThan(30);
     expect(model?.source).toBe("synthetic-orbit-summary");
   });
@@ -183,5 +187,42 @@ describe("buildDisplayCapturePathPoints", () => {
     ];
 
     expect(buildDisplayCapturePathPoints(sourcePath, 3.1)).toEqual(sourcePath);
+  });
+});
+
+describe("capture orbit playback helpers", () => {
+  it("estimates an orbital period from the capture path and body mu", () => {
+    const durationSeconds = estimateArrivalCaptureOrbitDurationSeconds(
+      [
+        [4_200, 0, 0],
+        [0, 0, 7_200],
+        [-4_200, 0, 0],
+        [0, 0, -7_200],
+        [4_200, 0, 0],
+      ],
+      42_828.375816,
+    );
+
+    expect(durationSeconds).not.toBeNull();
+    expect(durationSeconds).toBeGreaterThan(5_000);
+  });
+
+  it("samples a looping arrival orbit around the capture body", () => {
+    const sample = sampleArrivalCaptureOrbit(
+      [
+        [4_200, 0, 0],
+        [0, 0, 4_200],
+        [-4_200, 0, 0],
+        [0, 0, -4_200],
+        [4_200, 0, 0],
+      ],
+      [100_000, 0, 200_000],
+      0.25,
+    );
+
+    expect(sample).not.toBeNull();
+    expect(sample?.positionKm[0]).toBeCloseTo(100_000, 3);
+    expect(sample?.positionKm[2]).toBeCloseTo(204_200, 3);
+    expect(Math.hypot(...(sample?.velocityKmPerSec ?? [0, 0, 0]))).toBeCloseTo(1, 6);
   });
 });

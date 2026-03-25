@@ -73,6 +73,7 @@ def plan_tour(request: MissionTourRequest) -> dict:
         allow_assist_bodies=request.allowAssistBodies,
         allow_repeated_flybys=request.allowRepeatedFlybys,
         propulsion_config=request.propulsionConfig,
+        navigation_config=request.navigationConfig,
     )
     best_candidate = candidates[0] if candidates else None
     return {
@@ -94,6 +95,7 @@ def plan_tour(request: MissionTourRequest) -> dict:
         "finalMassKg": best_candidate.final_mass_kg if best_candidate else None,
         "totalPropellantUsedKg": best_candidate.total_propellant_used_kg if best_candidate else None,
         "propulsionConfig": best_candidate.propulsion_config if best_candidate else None,
+        "navigationTelemetry": best_candidate.navigation_telemetry if best_candidate else None,
         "missionTimeline": best_candidate.mission_timeline if best_candidate else None,
         "candidates": [candidate.to_dict() for candidate in candidates],
     }

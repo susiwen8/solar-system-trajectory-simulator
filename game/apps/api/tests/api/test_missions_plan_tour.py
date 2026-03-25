@@ -81,6 +81,42 @@ def test_plan_tour_returns_maneuver_fields_when_propulsion_enabled() -> None:
     assert "totalPropellantUsedKg" in data
 
 
+def test_plan_tour_returns_navigation_payload_when_enabled() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/missions/plan-tour",
+        json={
+            "departureBody": "earth",
+            "requiredVisitBodies": ["venus", "jupiter"],
+            "launchEpoch": "2026-01-01T00:00:00Z",
+            "navigationConfig": {
+                "enabled": True,
+                "randomSeed": 4,
+                "injectionDispersion": {
+                    "positionSigmaKm": 25.0,
+                    "velocitySigmaKmPerS": 0.02,
+                },
+                "correctionPolicy": {
+                    "maxTcmCount": 2,
+                    "predictedMissThresholdKm": 500.0,
+                    "positionDeviationThresholdKm": 10.0,
+                    "velocityDeviationThresholdKmPerS": 0.001,
+                    "checkpointStepSeconds": 86_400.0,
+                    "maxCorrectionDeltaVKmPerS": 0.02,
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "navigationTelemetry" in data
+    assert data["navigationTelemetry"]["enabled"] is True
+    assert data["navigationTelemetry"]["navigationEvents"]
+    assert data["samples"] == data["navigationTelemetry"]["dispersedSamples"]
+    assert "navigationTelemetry" in data["candidates"][0]
+
+
 def test_plan_tour_accepts_more_than_four_required_visit_bodies() -> None:
     client = TestClient(app)
     response = client.post(

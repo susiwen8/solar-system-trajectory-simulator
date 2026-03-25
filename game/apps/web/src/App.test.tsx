@@ -140,6 +140,63 @@ it("shows the orbit preview in the empty scene instead of the old placeholder co
   expect(fetchSpy).toHaveBeenCalledWith("/ephemeris/bodies?epoch=2026-01-01T00%3A00%3A00Z");
 });
 
+it("formats long upcoming event durations as years, months, and days", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
+    .mockResolvedValueOnce(
+      createJsonResponse({
+        referenceFrame: "heliocentric-inertial",
+        samples: [
+          {
+            epochSeconds: 0,
+            positionKm: [149597870.7, 0, 0],
+            velocityKmPerSec: [0, 29.78, 0],
+          },
+        ],
+        closestApproach: {
+          bodyId: "mars",
+          distanceKm: 8450000,
+          epochSeconds: 0,
+        },
+        missionTimeline: {
+          missionStartEpoch: "2026-01-01T00:00:00.000Z",
+          missionEndEpoch: "2027-02-05T00:00:00.000Z",
+          currentObjective: "Arrive at Mars",
+          events: [
+            {
+              id: "event-001",
+              type: "targetApproach",
+              epoch: "2027-02-05T00:00:00.000Z",
+              title: "Mars Approach",
+              description: "Begin final approach.",
+            },
+          ],
+          phases: [
+            {
+              id: "phase-001",
+              type: "deepSpaceCruise",
+              startEpoch: "2026-01-01T00:00:00.000Z",
+              endEpoch: "2027-02-05T00:00:00.000Z",
+              title: "Deep-Space Cruise",
+              description: "Cruise between mission events.",
+              eventIds: ["event-001"],
+            },
+          ],
+        },
+        ephemerisSource: "bundled-keplerian",
+        flightTimeSeconds: 400 * 86_400,
+        warnings: [],
+      }),
+    )
+    .mockResolvedValueOnce(createEphemerisResponse({ epoch: "2026-01-01T00:00:00.000Z" }));
+
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(await screen.findByText("下一事件: Mars Approach · 1 年 1 月 5 天后")).toBeInTheDocument();
+});
+
 it("shows the mission metrics panel after propagation results load", async () => {
   const fetchSpy = vi
     .spyOn(globalThis, "fetch")
@@ -531,8 +588,12 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(await screen.findByRole("button", { name: "开始" })).toBeInTheDocument();
   expect(await screen.findByTestId("trajectory-inset-map")).toBeInTheDocument();
   expect(await screen.findByTestId("arrival-capture-orbit")).toHaveAttribute("data-source", "segment-samples");
+  expect(await screen.findByTestId("arrival-capture-orbit")).toHaveAttribute("data-probe-mode", "transfer");
   expect(await screen.findByText("当前目标: Arrive at Mars")).toBeInTheDocument();
   expect(await screen.findByText("下一事件: Mars Approach · 1.5 天后")).toBeInTheDocument();
+  expect(await screen.findByTestId("playback-phase-jump-bar")).toBeInTheDocument();
+  expect(await screen.findByTestId("playback-phase-jump-phase-001")).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByTestId("playback-phase-jump-phase-002")).toHaveAttribute("aria-pressed", "false");
   expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 火星"))).toBeInTheDocument();
   expect((await screen.findAllByText("停泊轨道")).length).toBeGreaterThan(0);
   expect((await screen.findAllByText("地球逃逸")).length).toBeGreaterThan(0);
@@ -546,10 +607,187 @@ it("shows the mission metrics panel after propagation results load", async () =>
   await userEvent.hover(earthLabel);
   expect(earthLabel.closest(".scene-body-chip")).toHaveAttribute("data-active", "true");
 
-  fireEvent.change(screen.getByLabelText("回放步进"), { target: { value: "1" } });
+  await userEvent.click(await screen.findByTestId("playback-phase-jump-phase-002"));
 
   expect(await screen.findByText("当前时刻: 2026-01-01T06:00:00.000Z")).toBeInTheDocument();
+  expect(await screen.findByTestId("arrival-capture-orbit")).toHaveAttribute("data-probe-mode", "capture-orbit");
+  expect(await screen.findByTestId("playback-phase-jump-phase-001")).toHaveAttribute("aria-pressed", "false");
+  expect(await screen.findByTestId("playback-phase-jump-phase-002")).toHaveAttribute("aria-pressed", "true");
   expect(fetchSpy).toHaveBeenLastCalledWith("/ephemeris/bodies?epoch=2026-01-01T06%3A00%3A00.000Z");
+});
+
+it("keeps the clicked phase jump highlighted when a short phase has no dedicated sample", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
+    .mockResolvedValueOnce(
+      createJsonResponse({
+        referenceFrame: "heliocentric-inertial",
+        samples: [
+          {
+            epochSeconds: 0,
+            positionKm: [149597870.7, 0, 0],
+            velocityKmPerSec: [0, 29.78, 0],
+          },
+          {
+            epochSeconds: 7200,
+            positionKm: [149500000, 643248, 0],
+            velocityKmPerSec: [-0.1, 29.77, 0],
+          },
+        ],
+        closestApproach: {
+          bodyId: "mars",
+          distanceKm: 8450000,
+          epochSeconds: 7200,
+        },
+        missionTimeline: {
+          missionStartEpoch: "2026-01-01T00:00:00.000Z",
+          missionEndEpoch: "2026-01-01T03:00:00.000Z",
+          currentObjective: "Arrive at Mars",
+          events: [],
+          phases: [
+            {
+              id: "phase-001",
+              type: "launch",
+              startEpoch: "2026-01-01T00:00:00.000Z",
+              endEpoch: "2026-01-01T00:50:00.000Z",
+              title: "Launch",
+              description: "Initial departure.",
+              eventIds: [],
+            },
+            {
+              id: "phase-002",
+              type: "maneuverExecution",
+              startEpoch: "2026-01-01T00:50:00.000Z",
+              endEpoch: "2026-01-01T01:10:00.000Z",
+              title: "TCM-1",
+              description: "Trim maneuver.",
+              eventIds: [],
+            },
+            {
+              id: "phase-003",
+              type: "deepSpaceCruise",
+              startEpoch: "2026-01-01T01:10:00.000Z",
+              endEpoch: "2026-01-01T03:00:00.000Z",
+              title: "Deep-Space Cruise",
+              description: "Cruise onward.",
+              eventIds: [],
+            },
+          ],
+        },
+        ephemerisSource: "bundled-keplerian",
+        flightTimeSeconds: 10_800,
+        warnings: [],
+      }),
+    )
+    .mockResolvedValueOnce(createEphemerisResponse({ epoch: "2026-01-01T00:00:00.000Z" }));
+
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  await userEvent.click(await screen.findByTestId("playback-phase-jump-phase-002"));
+
+  expect(await screen.findByTestId("playback-phase-jump-phase-002")).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByTestId("playback-phase-jump-phase-001")).toHaveAttribute("aria-pressed", "false");
+  expect(await screen.findByText("任务分段: 轨道机动")).toBeInTheDocument();
+});
+
+it("keeps the clicked phase jump highlighted for candidate-backed results", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
+    .mockResolvedValueOnce(
+      createJsonResponse({
+        referenceFrame: "heliocentric-inertial",
+        ephemerisSource: "bundled-keplerian",
+        samples: [
+          {
+            epochSeconds: 0,
+            positionKm: [149597870.7, 0, 0],
+            velocityKmPerSec: [0, 29.78, 0],
+          },
+        ],
+        closestApproach: {
+          bodyId: "mars",
+          distanceKm: 8450000,
+          epochSeconds: 0,
+        },
+        flightTimeSeconds: 10_800,
+        warnings: [],
+        candidates: [
+          {
+            sequenceBodies: ["earth", "mars"],
+            score: 1.2,
+            deltaVKmPerS: 3.4,
+            flightTimeSeconds: 10_800,
+            warnings: [],
+            flybyEvents: [],
+            samples: [
+              {
+                epochSeconds: 0,
+                positionKm: [149597870.7, 0, 0],
+                velocityKmPerSec: [0, 29.78, 0],
+              },
+              {
+                epochSeconds: 7200,
+                positionKm: [149500000, 643248, 0],
+                velocityKmPerSec: [-0.1, 29.77, 0],
+              },
+            ],
+            closestApproach: {
+              bodyId: "mars",
+              distanceKm: 8450000,
+              epochSeconds: 7200,
+            },
+            missionTimeline: {
+              missionStartEpoch: "2026-01-01T00:00:00.000Z",
+              missionEndEpoch: "2026-01-01T03:00:00.000Z",
+              currentObjective: "Arrive at Mars",
+              events: [],
+              phases: [
+                {
+                  id: "phase-001",
+                  type: "launch",
+                  startEpoch: "2026-01-01T00:00:00.000Z",
+                  endEpoch: "2026-01-01T00:50:00.000Z",
+                  title: "Launch",
+                  description: "Initial departure.",
+                  eventIds: [],
+                },
+                {
+                  id: "phase-002",
+                  type: "maneuverExecution",
+                  startEpoch: "2026-01-01T00:50:00.000Z",
+                  endEpoch: "2026-01-01T01:10:00.000Z",
+                  title: "TCM-1",
+                  description: "Trim maneuver.",
+                  eventIds: [],
+                },
+                {
+                  id: "phase-003",
+                  type: "deepSpaceCruise",
+                  startEpoch: "2026-01-01T01:10:00.000Z",
+                  endEpoch: "2026-01-01T03:00:00.000Z",
+                  title: "Deep-Space Cruise",
+                  description: "Cruise onward.",
+                  eventIds: [],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    .mockResolvedValueOnce(createEphemerisResponse({ epoch: "2026-01-01T00:00:00.000Z" }));
+
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  await userEvent.click(await screen.findByTestId("playback-phase-jump-phase-002"));
+
+  expect(await screen.findByTestId("playback-phase-jump-phase-002")).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByTestId("playback-phase-jump-phase-001")).toHaveAttribute("aria-pressed", "false");
+  expect(await screen.findByText("任务分段: 轨道机动")).toBeInTheDocument();
 });
 
 it("renders gravity-assist candidates and switches the active plan", async () => {
@@ -1005,12 +1243,12 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
   expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 金星 -> 木星 -> 土星"))).toBeInTheDocument();
   expect((await screen.findAllByText(hasExactTextContent("完整序列: 地球 -> 金星 -> 地球 -> 木星 -> 土星"))).length).toBeGreaterThan(0);
   expect(await screen.findByText(/拜访顺序: 金星 -> 木星 -> 土星/)).toBeInTheDocument();
-  expect(await screen.findByText("900 天")).toBeInTheDocument();
+  expect(await screen.findByText("2 年 5 月 20 天")).toBeInTheDocument();
   expect(await screen.findByText("当前方案")).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: /地球 -> 木星 -> 金星 -> 土星/ }));
 
-  expect(await screen.findByText("1,040 天")).toBeInTheDocument();
+  expect(await screen.findByText("2 年 10 月 10 天")).toBeInTheDocument();
 });
 
 it("shows speed telemetry in the scene and switches components", async () => {

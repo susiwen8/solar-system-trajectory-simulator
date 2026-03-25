@@ -135,6 +135,28 @@ export const messages = {
     propellantMass: "Propellant Mass (kg)",
     maxThrust: "Max Thrust (N)",
     ispSeconds: "Specific Impulse (s)",
+    navigationDispersionSettings: "Navigation Dispersion",
+    enableNavigationDispersion: "Enable Navigation Dispersion",
+    fixedRandomSeed: "Fixed Random Seed",
+    positionSigmaKm: "Position Sigma (km)",
+    velocitySigmaKmPerS: "Velocity Sigma (km/s)",
+    maxTcmCount: "Max TCM Count",
+    predictedMissThresholdKm: "Predicted Miss Threshold (km)",
+    positionDeviationThresholdKm: "Position Deviation Threshold (km)",
+    velocityDeviationThresholdKmPerS: "Velocity Deviation Threshold (km/s)",
+    checkpointStepSeconds: "Checkpoint Step (s)",
+    maxCorrectionDeltaV: "Max Correction Delta-v (km/s)",
+    navigationSummary: "Navigation",
+    cumulativeCorrectionDeltaV: "Cumulative Correction Delta-v",
+    maxPredictedMiss: "Max Predicted Miss",
+    maxPositionDeviation: "Max Position Deviation",
+    maxVelocityDeviation: "Max Velocity Deviation",
+    finalPredictedMiss: "Final Predicted Miss",
+    navigationMode: "Navigation Mode",
+    navigationNominal: "Nominal",
+    navigationDispersed: "Dispersed",
+    correctionStatus: "Correction Status",
+    withinThresholds: "Within thresholds",
     visitOrderLabel: "Visit Order",
     fullSequenceLabel: "Full Sequence",
     visitCountLabel: "Visits",
@@ -167,6 +189,7 @@ export const messages = {
     propagateTrajectory: "Propagate Trajectory",
     propagateTrajectoryLoading: "Running propagation...",
     earthLaunch: "Earth Launch",
+    launch: "Launch",
     arrivalSuffix: "Arrival",
     assistSuffix: "Assist",
     visitSuffix: "Visit",
@@ -179,6 +202,11 @@ export const messages = {
     flybyEncounter: "Gravity-Assist Flyby",
     arrivalHyperbolicApproach: "Arrival Hyperbolic Approach",
     orbitInsertionBurn: "Orbit Insertion Burn",
+    targetApproach: "Target Approach",
+    arrivalPass: "Arrival Encounter",
+    scienceOperations: "Science Operations",
+    downlink: "Downlink",
+    maneuverExecution: "Maneuver",
   },
   zh: {
     languageZh: "中文",
@@ -285,6 +313,28 @@ export const messages = {
     propellantMass: "推进剂质量（kg）",
     maxThrust: "最大推力（N）",
     ispSeconds: "比冲（s）",
+    navigationDispersionSettings: "导航离散",
+    enableNavigationDispersion: "启用导航离散",
+    fixedRandomSeed: "固定随机种子",
+    positionSigmaKm: "位置离散标准差（km）",
+    velocitySigmaKmPerS: "速度离散标准差（km/s）",
+    maxTcmCount: "最大 TCM 次数",
+    predictedMissThresholdKm: "预测偏差阈值（km）",
+    positionDeviationThresholdKm: "位置偏差阈值（km）",
+    velocityDeviationThresholdKmPerS: "速度偏差阈值（km/s）",
+    checkpointStepSeconds: "检查点步长（s）",
+    maxCorrectionDeltaV: "最大修正 Delta-v（km/s）",
+    navigationSummary: "导航",
+    cumulativeCorrectionDeltaV: "累计修正 Delta-v",
+    maxPredictedMiss: "最大预测偏差",
+    maxPositionDeviation: "最大位置偏差",
+    maxVelocityDeviation: "最大速度偏差",
+    finalPredictedMiss: "最终预测偏差",
+    navigationMode: "导航模式",
+    navigationNominal: "名义轨迹",
+    navigationDispersed: "离散飞行轨迹",
+    correctionStatus: "修正状态",
+    withinThresholds: "处于阈值内",
     visitOrderLabel: "拜访顺序",
     fullSequenceLabel: "完整序列",
     visitCountLabel: "拜访数",
@@ -316,6 +366,7 @@ export const messages = {
     propagateTrajectory: "计算轨迹",
     propagateTrajectoryLoading: "正在计算轨迹...",
     earthLaunch: "地球出发",
+    launch: "发射",
     arrivalSuffix: "到达",
     assistSuffix: "飞越",
     visitSuffix: "拜访",
@@ -328,6 +379,11 @@ export const messages = {
     flybyEncounter: "引力辅助飞越",
     arrivalHyperbolicApproach: "到达双曲逼近",
     orbitInsertionBurn: "入轨制动",
+    targetApproach: "目标逼近",
+    arrivalPass: "到达交会",
+    scienceOperations: "科学探测",
+    downlink: "数据回传",
+    maneuverExecution: "轨道机动",
   },
 } as const;
 
@@ -368,6 +424,10 @@ export function localizeWarning(language: Language, warning: string) {
 export function localizeMissionSegment(language: Language, segmentType: string) {
   const copy = t(language);
 
+  if (segmentType === "launch") {
+    return copy.launch;
+  }
+
   if (segmentType === "launchParkingOrbit") {
     return copy.parkingOrbit;
   }
@@ -394,6 +454,26 @@ export function localizeMissionSegment(language: Language, segmentType: string) 
 
   if (segmentType === "orbitInsertionBurn") {
     return copy.orbitInsertionBurn;
+  }
+
+  if (segmentType === "targetApproach") {
+    return copy.targetApproach;
+  }
+
+  if (segmentType === "arrivalPass") {
+    return copy.arrivalPass;
+  }
+
+  if (segmentType === "scienceOperations") {
+    return copy.scienceOperations;
+  }
+
+  if (segmentType === "downlink") {
+    return copy.downlink;
+  }
+
+  if (segmentType === "maneuverExecution") {
+    return copy.maneuverExecution;
   }
 
   return segmentType;

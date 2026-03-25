@@ -1,0 +1,14 @@
+[project]
+name = "trajectory-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn", "pydantic", "httpx", "numpy", "scipy"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

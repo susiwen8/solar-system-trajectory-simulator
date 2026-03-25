@@ -7,6 +7,7 @@ import type {
   LaunchWindowResponse,
   MissionRequest,
   MissionTourRequest,
+  NavigationConfig,
   PropulsionConfig,
 } from "../types";
 
@@ -67,10 +68,36 @@ const defaultPropulsionConfig: PropulsionConfig = {
   ispSeconds: 3200,
 };
 
+const defaultNavigationConfig: NavigationConfig = {
+  enabled: true,
+  randomSeed: null,
+  injectionDispersion: {
+    positionSigmaKm: 25,
+    velocitySigmaKmPerS: 0.02,
+  },
+  correctionPolicy: {
+    maxTcmCount: 3,
+    predictedMissThresholdKm: 25000,
+    positionDeviationThresholdKm: 5000,
+    velocityDeviationThresholdKmPerS: 0.05,
+    checkpointStepSeconds: 432000,
+    maxCorrectionDeltaVKmPerS: 0.03,
+  },
+};
+
+function isoEpochToDateInputValue(epoch: string): string {
+  return epoch.includes("T") ? epoch.slice(0, 10) : epoch;
+}
+
+function dateInputValueToIsoEpoch(value: string): string {
+  return value ? `${value}T00:00:00Z` : value;
+}
+
 export default function MissionForm({ onSubmit, language, loading, launchWindowResult = null }: MissionFormProps) {
   const [selectedBodies, setSelectedBodies] = useState<Exclude<BodyId, "earth">[]>(["mars"]);
   const [trajectoryRequest, setTrajectoryRequest] = useState<MissionRequest>(defaultTrajectoryRequest);
   const [propulsionConfig, setPropulsionConfig] = useState<PropulsionConfig | null>(null);
+  const [navigationConfig, setNavigationConfig] = useState<NavigationConfig | null>(null);
   const [launchPlanningMode, setLaunchPlanningMode] = useState<LaunchPlanningMode>("recommendedWindow");
   const [selectedWindowLaunchEpoch, setSelectedWindowLaunchEpoch] = useState("");
   const copy = t(language);
@@ -84,7 +111,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
   }, [launchWindowResult]);
 
   function updateLaunchEpoch(value: string) {
-    setTrajectoryRequest((current) => ({ ...current, launchEpoch: value }));
+    setTrajectoryRequest((current) => ({ ...current, launchEpoch: dateInputValueToIsoEpoch(value) }));
   }
 
   function toggleVisitBody(bodyId: Exclude<BodyId, "earth">) {
@@ -177,6 +204,37 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
     });
   }
 
+  function toggleNavigation(enabled: boolean) {
+    setNavigationConfig(enabled ? navigationConfig ?? defaultNavigationConfig : null);
+  }
+
+  function updateNavigationSeed(value: string) {
+    setNavigationConfig({
+      ...(navigationConfig ?? defaultNavigationConfig),
+      randomSeed: value === "" ? null : Number(value),
+    });
+  }
+
+  function updateNavigationInjection<K extends keyof NavigationConfig["injectionDispersion"]>(key: K, value: number) {
+    setNavigationConfig({
+      ...(navigationConfig ?? defaultNavigationConfig),
+      injectionDispersion: {
+        ...(navigationConfig ?? defaultNavigationConfig).injectionDispersion,
+        [key]: value,
+      },
+    });
+  }
+
+  function updateNavigationPolicy<K extends keyof NavigationConfig["correctionPolicy"]>(key: K, value: number) {
+    setNavigationConfig({
+      ...(navigationConfig ?? defaultNavigationConfig),
+      correctionPolicy: {
+        ...(navigationConfig ?? defaultNavigationConfig).correctionPolicy,
+        [key]: value,
+      },
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedBodies.length === 0) {
@@ -199,6 +257,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
           ...trajectoryRequest,
           targetBody: selectedBodies[0],
           propulsionConfig: propulsionConfig ?? undefined,
+          navigationConfig: navigationConfig ?? undefined,
         },
         launchPlanning,
       });
@@ -212,6 +271,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
         requiredVisitBodies: selectedBodies,
         launchEpoch: trajectoryRequest.launchEpoch,
         propulsionConfig: propulsionConfig ?? undefined,
+        navigationConfig: navigationConfig ?? undefined,
         ...defaultPlannerOptions,
       },
       launchPlanning,
@@ -238,7 +298,8 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
               <span>{launchPlanningMode === "manual" ? copy.launchEpoch : copy.earliestLaunchEpoch}</span>
               <input
                 aria-label={launchPlanningMode === "manual" ? copy.launchEpoch : copy.earliestLaunchEpoch}
-                value={trajectoryRequest.launchEpoch}
+                type="date"
+                value={isoEpochToDateInputValue(trajectoryRequest.launchEpoch)}
                 disabled={loading}
                 onChange={(event) => updateLaunchEpoch(event.target.value)}
               />
@@ -359,6 +420,119 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
               ) : null}
             </>
           ) : null}
+
+          <div className="summary-card summary-card--placeholder">
+            <p className="summary-card__eyebrow">{copy.navigationDispersionSettings}</p>
+            <label className="mission-field mission-field--checkbox">
+              <span>{copy.enableNavigationDispersion}</span>
+              <input
+                aria-label={copy.enableNavigationDispersion}
+                type="checkbox"
+                checked={navigationConfig != null}
+                disabled={loading}
+                onChange={(event) => toggleNavigation(event.target.checked)}
+              />
+            </label>
+            {navigationConfig ? (
+              <div className="mission-form__grid mission-form__grid--two">
+                <label className="mission-field">
+                  <span>{copy.fixedRandomSeed}</span>
+                  <input
+                    aria-label={copy.fixedRandomSeed}
+                    type="number"
+                    value={navigationConfig.randomSeed ?? ""}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationSeed(event.target.value)}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.positionSigmaKm}</span>
+                  <input
+                    aria-label={copy.positionSigmaKm}
+                    type="number"
+                    value={navigationConfig.injectionDispersion.positionSigmaKm}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationInjection("positionSigmaKm", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.velocitySigmaKmPerS}</span>
+                  <input
+                    aria-label={copy.velocitySigmaKmPerS}
+                    type="number"
+                    step="0.001"
+                    value={navigationConfig.injectionDispersion.velocitySigmaKmPerS}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationInjection("velocitySigmaKmPerS", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.maxTcmCount}</span>
+                  <input
+                    aria-label={copy.maxTcmCount}
+                    type="number"
+                    value={navigationConfig.correctionPolicy.maxTcmCount}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationPolicy("maxTcmCount", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.predictedMissThresholdKm}</span>
+                  <input
+                    aria-label={copy.predictedMissThresholdKm}
+                    type="number"
+                    value={navigationConfig.correctionPolicy.predictedMissThresholdKm}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationPolicy("predictedMissThresholdKm", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.positionDeviationThresholdKm}</span>
+                  <input
+                    aria-label={copy.positionDeviationThresholdKm}
+                    type="number"
+                    value={navigationConfig.correctionPolicy.positionDeviationThresholdKm}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationPolicy("positionDeviationThresholdKm", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.velocityDeviationThresholdKmPerS}</span>
+                  <input
+                    aria-label={copy.velocityDeviationThresholdKmPerS}
+                    type="number"
+                    step="0.001"
+                    value={navigationConfig.correctionPolicy.velocityDeviationThresholdKmPerS}
+                    disabled={loading}
+                    onChange={(event) =>
+                      updateNavigationPolicy("velocityDeviationThresholdKmPerS", Number(event.target.value))
+                    }
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.checkpointStepSeconds}</span>
+                  <input
+                    aria-label={copy.checkpointStepSeconds}
+                    type="number"
+                    value={navigationConfig.correctionPolicy.checkpointStepSeconds}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationPolicy("checkpointStepSeconds", Number(event.target.value))}
+                  />
+                </label>
+                <label className="mission-field">
+                  <span>{copy.maxCorrectionDeltaV}</span>
+                  <input
+                    aria-label={copy.maxCorrectionDeltaV}
+                    type="number"
+                    step="0.001"
+                    value={navigationConfig.correctionPolicy.maxCorrectionDeltaVKmPerS}
+                    disabled={loading}
+                    onChange={(event) => updateNavigationPolicy("maxCorrectionDeltaVKmPerS", Number(event.target.value))}
+                  />
+                </label>
+              </div>
+            ) : null}
+          </div>
 
           <div className="summary-card summary-card--placeholder">
             <p className="summary-card__eyebrow">{copy.propulsionSettings}</p>

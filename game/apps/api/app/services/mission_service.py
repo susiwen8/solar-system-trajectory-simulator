@@ -6,15 +6,21 @@ import numpy as np
 
 from app.core.constants import PLANETARY_BODY_RADII_KM
 from app.core.dynamics.acceleration import combined_point_mass_acceleration
+from app.core.dynamics.flyby import SAFETY_ALTITUDE_KM
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.propagator import PropagationResult, propagate_state
-from app.schemas.mission import MissionRequest
+from app.core.ephemeris.interpolated_cache import (
+    InterpolatedEphemerisCache,
+    recommended_cache_step_seconds,
+)
+from app.schemas.mission import MissionRequest, NavigationConfig
 from app.services.arrival_capture_planner import ArrivalCapturePlanner
 from app.services.cruise_planner import CruisePlanner
 from app.services.earth_escape_planner import EarthEscapePlanner
 from app.services.gravity_assist_search import OUTER_TARGETS, GravityAssistSearchService
 from app.services.maneuver_planner import ManeuverPlanner
 from app.services.mission_segments import merge_segment_events, segment_to_dict
+from app.services.navigation_simulator import EncounterTarget, NavigationSimulator
 from app.services.mission_timeline import build_mission_timeline
 from app.services.parking_orbit_planner import ParkingOrbitPlanner
 from app.services.transfer_planner import TransferPlanner
@@ -37,6 +43,7 @@ class MissionPropagationResult:
     final_mass_kg: Optional[float] = None
     total_propellant_used_kg: Optional[float] = None
     propulsion_config: Optional[Dict[str, float]] = None
+    navigation_telemetry: Optional[Dict[str, object]] = None
     mission_timeline: Optional[Dict[str, object]] = None
     segments: Optional[List[Dict[str, object]]] = None
 
@@ -67,6 +74,8 @@ class MissionPropagationResult:
             payload["totalPropellantUsedKg"] = self.total_propellant_used_kg
         if self.propulsion_config is not None:
             payload["propulsionConfig"] = self.propulsion_config
+        if self.navigation_telemetry is not None:
+            payload["navigationTelemetry"] = self.navigation_telemetry
         if self.mission_timeline is not None:
             payload["missionTimeline"] = self.mission_timeline
         if self.segments is not None:
@@ -85,6 +94,7 @@ class MissionService:
         self.arrival_capture_planner = ArrivalCapturePlanner()
 
     def propagate(self, request: MissionRequest) -> MissionPropagationResult:
+        navigation_config = _coerce_navigation_config(request.navigationConfig)
         planner_warnings: List[str] = []
         segment_payloads: Optional[List[Dict[str, object]]] = None
         if (
@@ -166,14 +176,15 @@ class MissionService:
                 segment_to_dict(earth_escape_plan),
             ]
 
-        body_state_cache: Dict[str, list] = {}
+        ephemeris_cache = InterpolatedEphemerisCache(
+            ephemeris=self.ephemeris,
+            base_epoch=request.launchEpoch,
+            step_seconds=recommended_cache_step_seconds(output_step_seconds),
+        )
 
         def acceleration_fn(time_seconds: float, probe_position: np.ndarray) -> np.ndarray:
-            epoch = _epoch_with_offset(request.launchEpoch, time_seconds)
-            if epoch not in body_state_cache:
-                body_state_cache[epoch] = self.ephemeris.get_all_body_states(epoch)
             return combined_point_mass_acceleration(
-                body_state_cache[epoch],
+                ephemeris_cache.get_all_body_states(time_seconds),
                 probe_position,
                 minimum_radius_by_body_km=PLANETARY_BODY_RADII_KM,
             )
@@ -185,7 +196,7 @@ class MissionService:
             acceleration_fn=acceleration_fn,
         )
         samples = self._serialize_samples(propagation)
-        target_samples = self._target_samples_for_request(request, samples)
+        target_samples = self._target_samples_for_request(request, samples, ephemeris_cache=ephemeris_cache)
         closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
         warnings = planner_warnings + self._compute_warnings(samples)
 
@@ -193,6 +204,7 @@ class MissionService:
         final_mass_kg: Optional[float] = None
         total_propellant_used_kg: Optional[float] = None
         propulsion_config_payload: Optional[Dict[str, float]] = None
+        navigation_telemetry: Optional[Dict[str, object]] = None
 
         if request.propulsionConfig is not None:
             correction_direction = tuple(
@@ -218,7 +230,7 @@ class MissionService:
                 burn_segments=burn_segments,
             )
             samples = self._serialize_samples(maneuver_propagation)
-            target_samples = self._target_samples_for_request(request, samples)
+            target_samples = self._target_samples_for_request(request, samples, ephemeris_cache=ephemeris_cache)
             closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
             maneuver_events = self.maneuver_planner.build_maneuver_events(
                 launch_epoch=request.launchEpoch,
@@ -236,6 +248,32 @@ class MissionService:
                 *warnings,
                 f"Finite-thrust planner scheduled {len(maneuver_events)} correction burns",
             ]
+
+        if navigation_config is not None and navigation_config.enabled and samples:
+            encounter_target = self._build_navigation_target(
+                request=request,
+                closest_approach=closest_approach,
+                ephemeris_cache=ephemeris_cache,
+            )
+            if encounter_target is not None:
+                nominal_samples = [dict(sample) for sample in samples]
+                navigation_result = NavigationSimulator().simulate(
+                    launch_epoch=request.launchEpoch,
+                    nominal_initial_state=_sample_dict_to_state_vector(nominal_samples[0]),
+                    nominal_samples=nominal_samples,
+                    acceleration_fn=acceleration_fn,
+                    navigation_config=navigation_config,
+                    encounter_targets=[encounter_target],
+                    propulsion_config=request.propulsionConfig,
+                    sample_step_seconds=output_step_seconds,
+                )
+                samples = navigation_result.active_samples
+                navigation_telemetry = navigation_result.navigation_telemetry
+                target_samples = self._target_samples_for_request(request, samples, ephemeris_cache=ephemeris_cache)
+                closest_approach = compute_closest_approach(samples, request.targetBody, target_samples)
+                warnings = planner_warnings + self._compute_warnings(samples)
+                if request.propulsionConfig is not None and maneuver_events is not None:
+                    warnings.append(f"Finite-thrust planner scheduled {len(maneuver_events)} correction burns")
 
         segments = self._build_segments(
             request=request,
@@ -257,6 +295,7 @@ class MissionService:
             final_mass_kg=final_mass_kg,
             total_propellant_used_kg=total_propellant_used_kg,
             propulsion_config=propulsion_config_payload,
+            navigation_telemetry=navigation_telemetry,
             mission_timeline=build_mission_timeline(
                 launch_epoch=request.launchEpoch,
                 flight_time_seconds=duration_seconds,
@@ -268,6 +307,27 @@ class MissionService:
                 departure_body=request.departureBody,
             ),
             segments=segments,
+        )
+
+    def _build_navigation_target(
+        self,
+        *,
+        request: MissionRequest,
+        closest_approach: Dict[str, Union[float, str]],
+        ephemeris_cache: InterpolatedEphemerisCache,
+    ) -> Optional[EncounterTarget]:
+        epoch_seconds = closest_approach.get("epochSeconds")
+        if epoch_seconds is None:
+            return None
+
+        encounter_epoch = _epoch_with_offset(request.launchEpoch, float(epoch_seconds))
+        body_state = ephemeris_cache.get_body_state(request.targetBody, float(epoch_seconds))
+        return EncounterTarget(
+            body_id=request.targetBody,
+            epoch=encounter_epoch,
+            epoch_seconds=float(epoch_seconds),
+            position_km=tuple(body_state.position_km),
+            kind="arrival",
         )
 
     def _serialize_samples(self, propagation: PropagationResult) -> List[Dict[str, object]]:
@@ -300,14 +360,16 @@ class MissionService:
         self,
         request: MissionRequest,
         samples: List[Dict[str, object]],
+        *,
+        ephemeris_cache: InterpolatedEphemerisCache,
     ) -> List[Dict[str, object]]:
         return [
             {
                 "epochSeconds": sample["epochSeconds"],
                 "positionKm": list(
-                    self.ephemeris.get_body_state(
+                    ephemeris_cache.get_body_state(
                         request.targetBody,
-                        _epoch_with_offset(request.launchEpoch, sample["epochSeconds"]),
+                        float(sample["epochSeconds"]),
                     ).position_km
                 ),
             }
@@ -368,11 +430,30 @@ def _closest_sample(samples: List[Dict[str, object]], epoch_seconds: float) -> D
     return min(samples, key=lambda sample: abs(float(sample["epochSeconds"]) - epoch_seconds))
 
 
+def _sample_dict_to_state_vector(sample: Dict[str, object]) -> np.ndarray:
+    values = [
+        *sample["positionKm"],
+        *sample["velocityKmPerSec"],
+    ]
+    if sample.get("massKg") is not None:
+        values.append(sample["massKg"])
+    return np.array(values, dtype=float)
+
+
+def _coerce_navigation_config(raw_navigation_config) -> Optional[NavigationConfig]:
+    if raw_navigation_config is None:
+        return None
+    if isinstance(raw_navigation_config, NavigationConfig):
+        return raw_navigation_config
+    return NavigationConfig.model_validate(raw_navigation_config)
+
+
 def _default_arrival_orbit_summary(target_body: str) -> Dict[str, object]:
     body_radius_km = PLANETARY_BODY_RADII_KM[target_body]
+    periapsis_altitude_km = SAFETY_ALTITUDE_KM.get(target_body, 1_000.0)
     return {
         "isBound": True,
-        "periapsisKm": body_radius_km + 500.0,
-        "apoapsisKm": body_radius_km + 1_500.0,
+        "periapsisKm": body_radius_km + periapsis_altitude_km,
+        "apoapsisKm": body_radius_km + periapsis_altitude_km + 1_000.0,
         "inclinationDeg": 25.0,
     }
