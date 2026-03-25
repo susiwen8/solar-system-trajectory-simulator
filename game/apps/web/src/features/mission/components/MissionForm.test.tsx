@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import MissionForm from "./MissionForm";
@@ -27,14 +27,20 @@ it("defaults to recommended launch window mode", () => {
   expect(screen.getByLabelText("发射方案")).toHaveValue("recommendedWindow");
 });
 
+it("renders the earliest launch input as a date picker", () => {
+  render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
+
+  expect(screen.getByLabelText("最早发射时刻")).toHaveAttribute("type", "date");
+  expect(screen.getByLabelText("最早发射时刻")).toHaveValue("2026-01-01");
+});
+
 it("submits a trajectory request in manual mode when exactly one body is selected", async () => {
   const onSubmit = vi.fn();
   render(<MissionForm onSubmit={onSubmit} language="en" loading={false} />);
 
   expect(screen.getByLabelText("Trajectory Mode")).toHaveValue("autoTransfer");
   await userEvent.selectOptions(screen.getByLabelText("Launch Planning"), "manual");
-  await userEvent.clear(screen.getByLabelText("Launch Epoch"));
-  await userEvent.type(screen.getByLabelText("Launch Epoch"), "2026-10-15T00:00:00Z");
+  fireEvent.change(screen.getByLabelText("Launch Epoch"), { target: { value: "2026-10-15" } });
   await userEvent.click(screen.getByRole("button", { name: "Propagate Trajectory" }));
 
   expect(onSubmit).toHaveBeenCalledWith(
@@ -60,8 +66,7 @@ it("submits a tour request in manual mode when multiple bodies are selected", as
 
   await userEvent.click(screen.getByRole("checkbox", { name: "金星" }));
   await userEvent.selectOptions(screen.getByLabelText("发射方案"), "manual");
-  await userEvent.clear(screen.getByLabelText("发射时刻"));
-  await userEvent.type(screen.getByLabelText("发射时刻"), "2026-03-01T00:00:00Z");
+  fireEvent.change(screen.getByLabelText("发射时刻"), { target: { value: "2026-03-01" } });
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
   expect(onSubmit).toHaveBeenCalledWith(
@@ -98,6 +103,32 @@ it("submits propulsion settings for unified single-destination missions", async 
           propellantMassKg: 420,
           maxThrustN: 0.8,
           ispSeconds: 3200,
+        }),
+      }),
+    }),
+  );
+});
+
+it("submits navigationConfig when dispersion is enabled", async () => {
+  const onSubmit = vi.fn();
+  render(<MissionForm onSubmit={onSubmit} language="zh" loading={false} />);
+
+  await userEvent.click(screen.getByLabelText("启用导航离散"));
+  await userEvent.clear(screen.getByLabelText("固定随机种子"));
+  await userEvent.type(screen.getByLabelText("固定随机种子"), "42");
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "trajectory",
+      request: expect.objectContaining({
+        navigationConfig: expect.objectContaining({
+          enabled: true,
+          randomSeed: 42,
+          injectionDispersion: expect.objectContaining({
+            positionSigmaKm: 25,
+            velocitySigmaKmPerS: 0.02,
+          }),
         }),
       }),
     }),

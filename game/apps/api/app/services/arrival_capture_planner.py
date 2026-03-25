@@ -4,6 +4,7 @@ from math import cos, pi, sin, sqrt
 from typing import Dict, List, Optional
 
 from app.core.constants import PLANETARY_BODY_RADII_KM, SOLAR_SYSTEM_MU_KM3_PER_S2
+from app.core.dynamics.flyby import SAFETY_ALTITUDE_KM
 from app.services.encounter_geometry import build_encounter_geometry
 from app.services.mission_segments import build_segment_boundary_state
 
@@ -36,7 +37,10 @@ class ArrivalCapturePlanner:
         heliocentric_sample: Dict[str, object],
         orbit_summary: Dict[str, object],
     ) -> ArrivalCapturePlan:
-        periapsis_km = float(orbit_summary.get("periapsisKm") or (PLANETARY_BODY_RADII_KM[body_id] + 500.0))
+        periapsis_km = float(
+            orbit_summary.get("periapsisKm")
+            or (PLANETARY_BODY_RADII_KM[body_id] + SAFETY_ALTITUDE_KM.get(body_id, 1_000.0))
+        )
         apoapsis_km = float(orbit_summary.get("apoapsisKm") or periapsis_km)
         inclination_deg = float(orbit_summary.get("inclinationDeg") or 0.0)
         periapsis_altitude_km = periapsis_km - PLANETARY_BODY_RADII_KM[body_id]

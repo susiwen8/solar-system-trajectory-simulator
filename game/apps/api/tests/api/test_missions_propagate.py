@@ -127,6 +127,50 @@ def test_propagate_returns_propulsion_fields_when_maneuvers_enabled() -> None:
     assert cruise_segment["massSummary"]["propellantUsedKg"] == data["totalPropellantUsedKg"]
 
 
+def test_propagate_returns_navigation_payload_when_enabled() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/missions/propagate",
+        json={
+            "departureBody": "earth",
+            "targetBody": "mars",
+            "launchEpoch": "2026-01-01T00:00:00Z",
+            "initialState": {
+                "stateVector": {
+                    "positionKm": [149597870.7, 0.0, 0.0],
+                    "velocityKmPerSec": [0.0, 29.78, 0.0],
+                }
+            },
+            "durationSeconds": 259200,
+            "outputStepSeconds": 21600,
+            "navigationConfig": {
+                "enabled": True,
+                "randomSeed": 4,
+                "injectionDispersion": {
+                    "positionSigmaKm": 25.0,
+                    "velocitySigmaKmPerS": 0.02,
+                },
+                "correctionPolicy": {
+                    "maxTcmCount": 2,
+                    "predictedMissThresholdKm": 500.0,
+                    "positionDeviationThresholdKm": 10.0,
+                    "velocityDeviationThresholdKmPerS": 0.001,
+                    "checkpointStepSeconds": 21600,
+                    "maxCorrectionDeltaVKmPerS": 0.02,
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "navigationTelemetry" in data
+    assert data["navigationTelemetry"]["enabled"] is True
+    assert data["navigationTelemetry"]["nominalSamples"]
+    assert data["navigationTelemetry"]["dispersedSamples"]
+    assert data["samples"] == data["navigationTelemetry"]["dispersedSamples"]
+
+
 def test_propagate_returns_launch_and_escape_segments() -> None:
     client = TestClient(app)
     response = client.post(

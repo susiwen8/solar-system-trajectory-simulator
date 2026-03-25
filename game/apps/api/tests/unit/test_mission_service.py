@@ -1,3 +1,4 @@
+from app.core.constants import PLANETARY_BODY_RADII_KM
 from app.services.mission_service import MissionService
 
 
@@ -116,6 +117,23 @@ def test_mission_service_can_plan_a_full_auto_transfer(bundled_ephemeris) -> Non
     assert any(phase["type"] == "targetApproach" for phase in result.mission_timeline["phases"])
 
 
+def test_mission_service_auto_transfer_does_not_impact_the_target_body(bundled_ephemeris) -> None:
+    from app.schemas.mission import InitialStateInput, MissionRequest
+
+    request = MissionRequest(
+        departureBody="earth",
+        targetBody="mars",
+        launchEpoch="2026-01-01T00:00:00Z",
+        initialState=InitialStateInput(launchFromBody={"mode": "autoTransfer"}),
+        durationSeconds=None,
+        outputStepSeconds=None,
+    )
+
+    result = MissionService(ephemeris=bundled_ephemeris).propagate(request)
+
+    assert result.closest_approach["distanceKm"] > PLANETARY_BODY_RADII_KM["mars"]
+
+
 def test_mission_service_builds_staged_departure_segments(bundled_ephemeris) -> None:
     from app.schemas.mission import InitialStateInput, MissionRequest
 
@@ -203,3 +221,38 @@ def test_mission_service_keeps_cruise_mass_summary_in_sync_with_propulsion_outpu
     cruise_segment = next(segment for segment in result.segments if segment["segmentType"] == "heliocentricCruise")
     assert cruise_segment["massSummary"]["massAfterKg"] == result.final_mass_kg
     assert cruise_segment["massSummary"]["propellantUsedKg"] == result.total_propellant_used_kg
+
+
+def test_mission_service_returns_navigation_telemetry_when_enabled(
+    bundled_ephemeris,
+    sample_mission_request,
+) -> None:
+    service = MissionService(ephemeris=bundled_ephemeris)
+    request = sample_mission_request.model_copy(
+        update={
+            "navigationConfig": {
+                "enabled": True,
+                "randomSeed": 4,
+                "injectionDispersion": {
+                    "positionSigmaKm": 25.0,
+                    "velocitySigmaKmPerS": 0.02,
+                },
+                "correctionPolicy": {
+                    "maxTcmCount": 2,
+                    "predictedMissThresholdKm": 500.0,
+                    "positionDeviationThresholdKm": 10.0,
+                    "velocityDeviationThresholdKmPerS": 0.001,
+                    "checkpointStepSeconds": 21_600.0,
+                    "maxCorrectionDeltaVKmPerS": 0.02,
+                },
+            }
+        }
+    )
+
+    result = service.propagate(request)
+
+    assert result.navigation_telemetry is not None
+    assert result.navigation_telemetry["enabled"] is True
+    assert result.navigation_telemetry["nominalSamples"]
+    assert result.navigation_telemetry["dispersedSamples"]
+    assert result.samples == result.navigation_telemetry["dispersedSamples"]

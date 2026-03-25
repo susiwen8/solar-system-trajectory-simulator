@@ -141,6 +141,39 @@ const result = {
   ],
 };
 
+const resultWithNavigationTelemetry = {
+  ...result,
+  navigationTelemetry: {
+    enabled: true,
+    nominalSamples: result.samples,
+    dispersedSamples: result.samples,
+    navigationEvents: [
+      {
+        type: "dispersionInjected",
+        epoch: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        type: "tcmExecuted",
+        epoch: "2026-01-02T00:00:00.000Z",
+        reason: "predictedMiss",
+        predictedMissBeforeKm: 84500,
+        predictedMissAfterKm: 1200,
+        positionDeviationBeforeKm: 1200,
+        positionDeviationAfterKm: 120,
+        velocityDeviationBeforeKmPerS: 0.08,
+        velocityDeviationAfterKmPerS: 0.01,
+        deltaVKmPerS: 0.002,
+      },
+    ],
+    tcmCount: 1,
+    cumulativeCorrectionDeltaVKmPerS: 0.002,
+    maxPredictedMissKm: 84500,
+    maxPositionDeviationKm: 1200,
+    maxVelocityDeviationKmPerS: 0.08,
+    finalPredictedMissKm: 1200,
+  },
+};
+
 describe("MissionSummary", () => {
   it("shows flight time in days for English", () => {
     render(<MissionSummary result={result} language="en" />);
@@ -152,6 +185,20 @@ describe("MissionSummary", () => {
     render(<MissionSummary result={result} language="zh" />);
 
     expect(screen.getByText("3 天")).toBeInTheDocument();
+  });
+
+  it("shows long flight time as years, months, and days", () => {
+    render(
+      <MissionSummary
+        result={{
+          ...result,
+          flightTimeSeconds: 900 * 86_400,
+        }}
+        language="zh"
+      />,
+    );
+
+    expect(screen.getByText("2 年 5 月 20 天")).toBeInTheDocument();
   });
 
   it("renders propellant usage and final mass", () => {
@@ -177,5 +224,14 @@ describe("MissionSummary", () => {
     expect(screen.getByText(/Delta-v: 0.0079 km\/s/)).toBeInTheDocument();
     expect(screen.getByText(/Turn Angle: 28/)).toBeInTheDocument();
     expect(screen.getByText(/Periapsis Altitude: 75,000 km/)).toBeInTheDocument();
+  });
+
+  it("renders navigation metrics when telemetry is enabled", () => {
+    render(<MissionSummary result={resultWithNavigationTelemetry} language="zh" />);
+
+    expect(screen.getByText("导航")).toBeInTheDocument();
+    expect(screen.getByText("累计修正 Delta-v")).toBeInTheDocument();
+    expect(screen.getByText("最大预测偏差")).toBeInTheDocument();
+    expect(screen.getByText("最终预测偏差")).toBeInTheDocument();
   });
 });

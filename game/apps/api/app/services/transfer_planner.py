@@ -9,7 +9,12 @@ from scipy.optimize import minimize_scalar
 
 from app.core.constants import PLANETARY_BODY_RADII_KM, SOLAR_SYSTEM_MU_KM3_PER_S2
 from app.core.dynamics.acceleration import combined_point_mass_acceleration
+from app.core.dynamics.flyby import SAFETY_ALTITUDE_KM
 from app.core.dynamics.lambert import LambertSolution, solve_lambert_transfer
+from app.core.ephemeris.interpolated_cache import (
+    InterpolatedEphemerisCache,
+    recommended_cache_step_seconds,
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,12 @@ class TransferPlan:
     duration_seconds: float
     output_step_seconds: float
     miss_distance_km: float
+    delta_v_km_per_s: float
+
+
+@dataclass(frozen=True)
+class TransferWindowEstimate:
+    duration_seconds: float
     delta_v_km_per_s: float
 
 
@@ -97,6 +108,33 @@ class TransferPlanner:
             output_step_seconds=output_step_seconds,
             miss_distance_km=miss_distance,
             delta_v_km_per_s=departure_delta_v + arrival_delta_v,
+        )
+
+    def estimate_window_candidate(self, departure_body: str, target_body: str, launch_epoch: str) -> TransferWindowEstimate:
+        if departure_body != "earth":
+            raise ValueError("Auto-transfer planning currently supports Earth departures only")
+
+        departure_state = self.ephemeris.get_body_state(departure_body, launch_epoch)
+        departure_position = np.array(departure_state.position_km, dtype=float)
+        departure_velocity = np.array(departure_state.velocity_km_per_s, dtype=float)
+        target_launch_state = self.ephemeris.get_body_state(target_body, launch_epoch)
+
+        r1 = np.linalg.norm(departure_position)
+        r2 = np.linalg.norm(np.array(target_launch_state.position_km, dtype=float))
+        transfer_axis = (r1 + r2) / 2.0
+        hohmann_time = pi * np.sqrt((transfer_axis**3) / self.solar_mu)
+
+        duration_bounds = self._duration_bounds_seconds(hohmann_time, r2 >= r1)
+        best = self._best_candidate(
+            launch_epoch=launch_epoch,
+            departure_position=departure_position,
+            departure_velocity=departure_velocity,
+            target_body=target_body,
+            duration_bounds=duration_bounds,
+        )
+        return TransferWindowEstimate(
+            duration_seconds=best.duration_seconds,
+            delta_v_km_per_s=best.total_delta_v_km_per_s,
         )
 
     def _build_departure_state_at_soi_boundary(
@@ -210,7 +248,10 @@ class TransferPlanner:
     ) -> Optional[_TransferCandidate]:
         target_epoch = _epoch_with_offset(launch_epoch, duration_seconds)
         target_state = self.ephemeris.get_body_state(target_body, target_epoch)
-        target_position = np.array(target_state.position_km, dtype=float)
+        target_position = self._arrival_target_position_km(
+            target_body=target_body,
+            body_position_km=np.array(target_state.position_km, dtype=float),
+        )
         target_velocity = np.array(target_state.velocity_km_per_s, dtype=float)
         try:
             solution = solve_lambert_transfer(
@@ -247,7 +288,11 @@ class TransferPlanner:
         )
         target_epoch = _epoch_with_offset(launch_epoch, duration_seconds)
         target_state = self.ephemeris.get_body_state(target_body, target_epoch)
-        return float(np.linalg.norm(final_state[:3] - np.array(target_state.position_km, dtype=float)))
+        target_position = self._arrival_target_position_km(
+            target_body=target_body,
+            body_position_km=np.array(target_state.position_km, dtype=float),
+        )
+        return float(np.linalg.norm(final_state[:3] - target_position))
 
     def _propagate_to_epoch(
         self,
@@ -256,16 +301,17 @@ class TransferPlanner:
         *,
         launch_epoch: str,
     ) -> np.ndarray:
-        body_state_cache: Dict[str, List] = {}
+        ephemeris_cache = InterpolatedEphemerisCache(
+            ephemeris=self.ephemeris,
+            base_epoch=launch_epoch,
+            step_seconds=recommended_cache_step_seconds(self._recommended_output_step(duration_seconds)),
+        )
 
         def rhs(time_seconds: float, state: np.ndarray) -> np.ndarray:
             position = state[:3]
             velocity = state[3:]
-            epoch = _epoch_with_offset(launch_epoch, time_seconds)
-            if epoch not in body_state_cache:
-                body_state_cache[epoch] = self.ephemeris.get_all_body_states(epoch)
             acceleration = combined_point_mass_acceleration(
-                body_state_cache[epoch],
+                ephemeris_cache.get_all_body_states(time_seconds),
                 position,
                 minimum_radius_by_body_km=PLANETARY_BODY_RADII_KM,
             )
@@ -296,7 +342,10 @@ class TransferPlanner:
     ) -> tuple[np.ndarray, np.ndarray, float]:
         target_epoch = _epoch_with_offset(launch_epoch, duration_seconds)
         target_state = self.ephemeris.get_body_state(target_body, target_epoch)
-        target_position = np.array(target_state.position_km, dtype=float)
+        target_position = self._arrival_target_position_km(
+            target_body=target_body,
+            body_position_km=np.array(target_state.position_km, dtype=float),
+        )
         current_velocity = np.array(initial_velocity, dtype=float)
 
         current_state = self._propagate_to_epoch(
@@ -312,21 +361,18 @@ class TransferPlanner:
         best_error = current_error
         best_miss_distance = float(np.linalg.norm(best_error))
         perturbation_km_per_s = 0.01
+        jacobian = self._estimate_arrival_jacobian(
+            departure_position=departure_position,
+            current_velocity=current_velocity,
+            current_state=current_state,
+            duration_seconds=duration_seconds,
+            launch_epoch=launch_epoch,
+            perturbation_km_per_s=perturbation_km_per_s,
+        )
 
         for _ in range(6):
             if current_miss_distance <= 10.0:
                 break
-
-            jacobian = np.zeros((3, 3), dtype=float)
-            for axis in range(3):
-                perturbed_velocity = current_velocity.copy()
-                perturbed_velocity[axis] += perturbation_km_per_s
-                perturbed_state = self._propagate_to_epoch(
-                    np.array([*departure_position, *perturbed_velocity], dtype=float),
-                    duration_seconds,
-                    launch_epoch=launch_epoch,
-                )
-                jacobian[:, axis] = (perturbed_state[:3] - current_state[:3]) / perturbation_km_per_s
 
             delta_v, *_ = np.linalg.lstsq(jacobian, current_error, rcond=None)
             delta_v_norm = float(np.linalg.norm(delta_v))
@@ -335,6 +381,8 @@ class TransferPlanner:
             if delta_v_norm > 2.5:
                 delta_v *= 2.5 / delta_v_norm
 
+            previous_velocity = current_velocity.copy()
+            previous_state = current_state.copy()
             current_velocity = current_velocity + 0.85 * delta_v
             current_state = self._propagate_to_epoch(
                 np.array([*departure_position, *current_velocity], dtype=float),
@@ -348,8 +396,55 @@ class TransferPlanner:
                 best_state = current_state
                 best_error = current_error
                 best_miss_distance = current_miss_distance
+            jacobian = self._update_arrival_jacobian(
+                jacobian=jacobian,
+                previous_velocity=previous_velocity,
+                current_velocity=current_velocity,
+                previous_state=previous_state,
+                current_state=current_state,
+            )
 
         return best_velocity, best_state, best_miss_distance
+
+    def _estimate_arrival_jacobian(
+        self,
+        *,
+        departure_position: np.ndarray,
+        current_velocity: np.ndarray,
+        current_state: np.ndarray,
+        duration_seconds: float,
+        launch_epoch: str,
+        perturbation_km_per_s: float,
+    ) -> np.ndarray:
+        jacobian = np.zeros((3, 3), dtype=float)
+        for axis in range(3):
+            perturbed_velocity = current_velocity.copy()
+            perturbed_velocity[axis] += perturbation_km_per_s
+            perturbed_state = self._propagate_to_epoch(
+                np.array([*departure_position, *perturbed_velocity], dtype=float),
+                duration_seconds,
+                launch_epoch=launch_epoch,
+            )
+            jacobian[:, axis] = (perturbed_state[:3] - current_state[:3]) / perturbation_km_per_s
+        return jacobian
+
+    def _update_arrival_jacobian(
+        self,
+        *,
+        jacobian: np.ndarray,
+        previous_velocity: np.ndarray,
+        current_velocity: np.ndarray,
+        previous_state: np.ndarray,
+        current_state: np.ndarray,
+    ) -> np.ndarray:
+        step = current_velocity - previous_velocity
+        denominator = float(np.dot(step, step))
+        if denominator <= 1e-12 or not np.isfinite(denominator):
+            return jacobian
+
+        actual_delta = current_state[:3] - previous_state[:3]
+        predicted_delta = jacobian @ step
+        return jacobian + np.outer(actual_delta - predicted_delta, step) / denominator
 
     def _duration_bounds_seconds(self, hohmann_time: float, is_outer_target: bool) -> Tuple[float, float]:
         minimum = max(45.0 * 86_400.0, hohmann_time * (0.7 if is_outer_target else 0.45))
@@ -362,6 +457,15 @@ class TransferPlanner:
     def _sphere_of_influence_radius_km(self, body_id: str, heliocentric_radius_km: float) -> float:
         body_mu = SOLAR_SYSTEM_MU_KM3_PER_S2[body_id]
         return heliocentric_radius_km * (body_mu / self.solar_mu) ** (2.0 / 5.0)
+
+    def _arrival_target_position_km(self, *, target_body: str, body_position_km: np.ndarray) -> np.ndarray:
+        arrival_radius_km = PLANETARY_BODY_RADII_KM[target_body] + SAFETY_ALTITUDE_KM.get(target_body, 1_000.0)
+        body_distance_km = float(np.linalg.norm(body_position_km))
+        if body_distance_km <= 1e-9:
+            direction = np.array([1.0, 0.0, 0.0], dtype=float)
+        else:
+            direction = body_position_km / body_distance_km
+        return body_position_km + direction * arrival_radius_km
 
 
 def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:

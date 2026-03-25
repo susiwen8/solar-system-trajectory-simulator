@@ -37,10 +37,15 @@ def propagate_state(
 
     active_burn_segments = burn_segments or []
     sample_times = np.arange(t_span[0], t_span[1], sample_step_s, dtype=float)
+    sample_times = sample_times[
+        (sample_times >= float(min(t_span))) & (sample_times <= float(max(t_span)))
+    ]
     if sample_times.size == 0 or sample_times[0] != float(t_span[0]):
         sample_times = np.insert(sample_times, 0, float(t_span[0]))
     if sample_times[-1] != float(t_span[1]):
         sample_times = np.append(sample_times, float(t_span[1]))
+    sample_times[0] = float(t_span[0])
+    sample_times[-1] = float(t_span[1])
 
     def rhs(time_seconds: float, state: np.ndarray) -> np.ndarray:
         position = state[:3]

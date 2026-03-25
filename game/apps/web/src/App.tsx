@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import MissionForm, { type MissionSubmission } from "./features/mission/components/MissionForm";
 import MissionSummary from "./features/mission/components/MissionSummary";
+import { buildArrivalCaptureModel } from "./features/scene/lib/arrival-capture";
 import type {
   BodyState,
   LaunchWindowRequest,
@@ -32,6 +33,7 @@ export default function App() {
   const ephemerisCacheRef = useRef<Record<string, { bodies: BodyState[]; ephemerisSource: string }>>({});
   const copy = t(language);
   const activeResult = result ? resolveActiveResult(result, activeCandidateIndex) : null;
+  const hasTerminalCaptureOrbit = activeResult ? buildArrivalCaptureModel(activeResult) != null : false;
 
   const currentEpoch =
     activeResult && launchEpoch
@@ -78,7 +80,9 @@ export default function App() {
     }
 
     if (selectedSampleIndex >= activeResult.samples.length - 1) {
-      setIsPlaying(false);
+      if (!hasTerminalCaptureOrbit) {
+        setIsPlaying(false);
+      }
       return;
     }
 
@@ -95,7 +99,7 @@ export default function App() {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isPlaying, activeResult, selectedSampleIndex]);
+  }, [hasTerminalCaptureOrbit, isPlaying, activeResult, selectedSampleIndex]);
 
   async function handleSubmit(submission: MissionSubmission) {
     setLoading(true);

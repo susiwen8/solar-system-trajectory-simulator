@@ -1,6 +1,8 @@
 import type { ProbeCameraView } from "./camera";
 import type { OrbitCameraState } from "./orbit-camera";
 import { scaleDistanceKm } from "./scale";
+import type { ScenePerspective } from "./scene-perspective";
+export type { ScenePerspective } from "./scene-perspective";
 
 export type ProbeCameraFrame = {
   position: [number, number, number];
@@ -14,11 +16,43 @@ export function buildProbeCameraFrame(
   view: ProbeCameraView,
   zoom: number,
   orbitState?: OrbitCameraState,
+  perspective: ScenePerspective = "cinematic-follow",
 ): ProbeCameraFrame {
   const probePosition = toSceneVector(samplePositionKm);
   const forward = toSceneDirection(view.lookDirection);
   const right = resolveRightVector(forward);
   const up = normalizeSceneDirection(cross(right, forward));
+
+  if (perspective === "topdown-follow") {
+    return {
+      position: [
+        probePosition[0],
+        probePosition[1] + 34 / zoom,
+        probePosition[2],
+      ],
+      lookAt: [...probePosition],
+      fovDeg: 44,
+      zoom,
+    };
+  }
+
+  if (perspective === "first-person") {
+    return {
+      position: [
+        probePosition[0] + forward[0] * 0.32 + up[0] * 0.18,
+        probePosition[1] + forward[1] * 0.32 + up[1] * 0.18,
+        probePosition[2] + forward[2] * 0.32 + up[2] * 0.18,
+      ],
+      lookAt: [
+        probePosition[0] + forward[0] * 28,
+        probePosition[1] + forward[1] * 28,
+        probePosition[2] + forward[2] * 28,
+      ],
+      fovDeg: 66,
+      zoom: 1,
+    };
+  }
+
   const cinematic = cinematicOffsets(view.mode);
 
   if (orbitState) {
