@@ -154,7 +154,7 @@ export default function SolarSystemSimulatorPage({ language, onLanguageChange }:
   }
 
   return (
-    <>
+    <main className="app-shell" data-scroll-mode="viewport-locked">
       <aside className="mission-panel" aria-label={copy.missionControlPanel}>
         <div className="mission-panel__header">
           <div className="mission-panel__header-top">
@@ -264,7 +264,7 @@ export default function SolarSystemSimulatorPage({ language, onLanguageChange }:
           </section>
         )}
       </section>
-    </>
+    </main>
   );
 }
 

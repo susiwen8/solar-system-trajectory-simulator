@@ -33,6 +33,7 @@ export const messages = {
     appTitle: "Solar System Trajectory Simulator",
     appLede:
       "Configure a heliocentric departure state on the left, then inspect the propagated trajectory in the live flight view.",
+    routeNavigation: "Page Navigation",
     simulatorNavLabel: "Simulator",
     recoveryNavLabel: "SpaceX Recovery",
     spacexRecoveryTitle: "SpaceX Recovery",
@@ -219,6 +220,7 @@ export const messages = {
     deckEyebrow: "星际任务控制台",
     appTitle: "太阳系轨迹模拟器",
     appLede: "左侧配置任务参数，右侧查看真实时间推进的飞行轨迹与太阳系场景。",
+    routeNavigation: "页面导航",
     simulatorNavLabel: "模拟器",
     recoveryNavLabel: "回收任务",
     spacexRecoveryTitle: "SpaceX 回收任务",

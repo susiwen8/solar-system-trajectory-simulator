@@ -110,6 +110,7 @@ it("renders the recovery page at /spacex-recovery", () => {
 
   expect(screen.getByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
   expect(screen.getByText("回收任务占位页")).toBeInTheDocument();
+  expect(screen.getByRole("main")).not.toHaveAttribute("data-scroll-mode");
 });
 
 it("swaps pages and responds to popstate from the nav", async () => {

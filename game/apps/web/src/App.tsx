@@ -53,8 +53,8 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell" data-scroll-mode="viewport-locked">
-      <nav aria-label="Page navigation" style={navStyles}>
+    <>
+      <nav aria-label={copy.routeNavigation} style={navStyles}>
         <a
           href={appRoutePath("simulator")}
           style={route === "simulator" ? { ...linkStyles, ...activeLinkStyles } : linkStyles}
@@ -84,6 +84,6 @@ export default function App() {
       ) : (
         <SpaceXRecoveryPage language={language} />
       )}
-    </main>
+    </>
   );
 }
