@@ -112,12 +112,19 @@ it("renders the recovery page at /spacex-recovery", () => {
   expect(screen.getByText("回收任务占位页")).toBeInTheDocument();
 });
 
-it("updates browser history when switching pages from the nav", async () => {
+it("swaps pages and responds to popstate from the nav", async () => {
+  const user = userEvent.setup();
   renderAtPath("/");
 
-  await userEvent.click(screen.getByRole("link", { name: "回收任务" }));
+  await user.click(screen.getByRole("link", { name: "回收任务" }));
 
   expect(window.location.pathname).toBe("/spacex-recovery");
+  expect(await screen.findByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
+
+  window.history.pushState({}, "", "/");
+  fireEvent(window, new PopStateEvent("popstate"));
+
+  expect(await screen.findByRole("heading", { name: "太阳系轨迹模拟器" })).toBeInTheDocument();
 });
 
 it("renders the simulator heading", () => {
