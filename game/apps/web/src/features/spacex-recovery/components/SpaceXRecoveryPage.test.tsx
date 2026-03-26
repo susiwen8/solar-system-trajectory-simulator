@@ -129,4 +129,14 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByText("镜头保持近距离仰视，突出推力和尺度感。").closest("li")).not.toBeNull();
     expect(screen.getByRole("button", { name: "开始" })).toBeInTheDocument();
   });
+
+  it("mounts the built-in recovery scene when no override scene is provided", () => {
+    mockMatchMedia(true);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+
+    render(<SpaceXRecoveryPage language="zh" />);
+
+    expect(screen.getByTestId("spacex-recovery-scene")).toBeInTheDocument();
+    expect(screen.getByText("当前环境无法显示 3D 画面。")).toBeInTheDocument();
+  });
 });

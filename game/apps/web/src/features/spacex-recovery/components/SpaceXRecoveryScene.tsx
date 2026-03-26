@@ -524,6 +524,11 @@ function buildStarField() {
 }
 
 function resolveWebGlContext(canvas: HTMLCanvasElement) {
+  // jsdom never provides a WebGL context, so skip the noisy not-implemented branch in tests.
+  if (typeof navigator !== "undefined" && /\bjsdom\b/i.test(navigator.userAgent)) {
+    return null;
+  }
+
   try {
     return (
       (canvas.getContext("webgl2") as WebGL2RenderingContext | null) ??

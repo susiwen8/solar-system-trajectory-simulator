@@ -5,19 +5,14 @@ import {
   RECOVERY_DEMO_DURATION_SECONDS,
   getRecoveryDemoSnapshot,
   type RecoveryPhaseId,
-  type RecoveryDemoSnapshot,
 } from "../lib/recovery-sequence";
 import RecoveryPhaseCard from "./RecoveryPhaseCard";
 import RecoveryPlaybackControls from "./RecoveryPlaybackControls";
-
-type RecoverySceneProps = {
-  language: Language;
-  snapshot: RecoveryDemoSnapshot;
-};
+import SpaceXRecoveryScene, { type SpaceXRecoverySceneProps } from "./SpaceXRecoveryScene";
 
 type SpaceXRecoveryPageProps = {
   language: Language;
-  SceneComponent?: ComponentType<RecoverySceneProps>;
+  SceneComponent?: ComponentType<SpaceXRecoverySceneProps>;
 };
 
 type LocalizedRecoveryPhaseContent = {
@@ -109,22 +104,9 @@ function prefersReducedMotion() {
     : false;
 }
 
-function DefaultRecoveryScene({ language, snapshot }: RecoverySceneProps) {
-  const copy = t(language);
-  const phaseContent = RECOVERY_PHASE_CONTENT[language][snapshot.activePhase.id];
-
-  return (
-    <section className="recovery-scene" aria-label={copy.recoverySceneLabel}>
-      <p className="eyebrow">{copy.recoverySceneLabel}</p>
-      <p>{phaseContent.title}</p>
-      <p>{copy.recoverySceneBody}</p>
-    </section>
-  );
-}
-
 export default function SpaceXRecoveryPage({
   language,
-  SceneComponent = DefaultRecoveryScene,
+  SceneComponent = SpaceXRecoveryScene,
 }: SpaceXRecoveryPageProps) {
   const copy = t(language);
   const [progress, setProgress] = useState(0);
@@ -166,25 +148,32 @@ export default function SpaceXRecoveryPage({
         <p>{copy.recoveryPageBody}</p>
       </header>
 
-      <RecoveryPhaseCard
-        language={language}
-        title={phaseContent.title}
-        summary={phaseContent.summary}
-        highlights={phaseContent.highlights}
-      />
-      <SceneComponent language={language} snapshot={snapshot} />
-      <RecoveryPlaybackControls
-        language={language}
-        isPlaying={isPlaying}
-        progress={progress}
-        onTogglePlayback={() => {
-          setIsPlaying((current) => !current);
-        }}
-        onReset={handleReset}
-        onProgressChange={(nextProgress) => {
-          setProgress(nextProgress);
-        }}
-      />
+      <section className="recovery-page__grid">
+        <div className="recovery-page__scene-column">
+          <SceneComponent language={language} snapshot={snapshot} />
+        </div>
+
+        <div className="recovery-page__control-column">
+          <RecoveryPhaseCard
+            language={language}
+            title={phaseContent.title}
+            summary={phaseContent.summary}
+            highlights={phaseContent.highlights}
+          />
+          <RecoveryPlaybackControls
+            language={language}
+            isPlaying={isPlaying}
+            progress={progress}
+            onTogglePlayback={() => {
+              setIsPlaying((current) => !current);
+            }}
+            onReset={handleReset}
+            onProgressChange={(nextProgress) => {
+              setProgress(nextProgress);
+            }}
+          />
+        </div>
+      </section>
     </main>
   );
 }

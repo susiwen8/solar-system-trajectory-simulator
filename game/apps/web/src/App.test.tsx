@@ -105,11 +105,13 @@ it("renders the simulator page at /", () => {
   expect(screen.getByRole("heading", { name: "太阳系轨迹模拟器" })).toBeInTheDocument();
 });
 
-it("renders the recovery page at /spacex-recovery", () => {
+it("renders the recovery page at /spacex-recovery with the explainer controls and scene", () => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   renderAtPath("/spacex-recovery");
 
   expect(screen.getByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
-  expect(screen.getByText("回收任务占位页")).toBeInTheDocument();
+  expect(screen.getByRole("slider", { name: "回放步进" })).toBeInTheDocument();
+  expect(screen.getByTestId("spacex-recovery-scene")).toBeInTheDocument();
   expect(screen.getByRole("main")).not.toHaveAttribute("data-scroll-mode");
 });
 
