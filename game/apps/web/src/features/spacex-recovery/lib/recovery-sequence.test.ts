@@ -12,6 +12,15 @@ describe("getRecoveryPhase", () => {
     expect(getRecoveryPhase(1).id).toBe("second-stage-orbital-continuation");
     expect(RECOVERY_DEMO_DURATION_SECONDS).toBeGreaterThan(0);
   });
+
+  it("hands off phases at the authored boundary markers", () => {
+    expect(getRecoveryPhase(0.1).id).toBe("pitch-and-ascent");
+    expect(getRecoveryPhase(0.26).id).toBe("stage-separation");
+    expect(getRecoveryPhase(0.4).id).toBe("first-stage-boostback");
+    expect(getRecoveryPhase(0.58).id).toBe("first-stage-atmospheric-return");
+    expect(getRecoveryPhase(0.78).id).toBe("landing-burn-and-touchdown");
+    expect(getRecoveryPhase(0.9).id).toBe("second-stage-orbital-continuation");
+  });
 });
 
 describe("getRecoveryDemoSnapshot", () => {
@@ -52,6 +61,20 @@ describe("getRecoveryDemoSnapshot", () => {
     );
     expect(snapshot.trajectory.stageOne.visible).toBe(true);
     expect(snapshot.trajectory.stageTwo.visible).toBe(true);
+  });
+
+  it("moves the booster back toward recovery during first-stage-boostback", () => {
+    const boostbackStart = getRecoveryDemoSnapshot(0.41);
+    const boostbackEnd = getRecoveryDemoSnapshot(0.57);
+
+    expect(boostbackStart.activePhase.id).toBe("first-stage-boostback");
+    expect(boostbackEnd.activePhase.id).toBe("first-stage-boostback");
+    expect(boostbackEnd.firstStage.transform.position[0]).toBeLessThan(
+      boostbackStart.firstStage.transform.position[0],
+    );
+    expect(boostbackEnd.firstStage.transform.rotation).not.toEqual(
+      boostbackStart.firstStage.transform.rotation,
+    );
   });
 
   it("exposes explainer bullets for the active phase", () => {

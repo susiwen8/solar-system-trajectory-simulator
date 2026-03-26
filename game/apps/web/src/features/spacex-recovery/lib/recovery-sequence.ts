@@ -162,7 +162,7 @@ const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
   { progress: 0.34, position: [54, 48, -1], rotation: [0.22, 0.1, 0] },
   { progress: 0.4, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
-  { progress: 0.58, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
+  { progress: 0.58, position: [44, 40, -3], rotation: [0.46, 0.18, -0.07] },
   { progress: 0.78, position: [28, 24, -4], rotation: [0.2, 0.08, -0.05] },
   { progress: 0.9, position: [12, 10, -1], rotation: [0.08, 0.03, -0.02] },
   { progress: 1, position: [4, 4, 0], rotation: [0, 0, 0] },
