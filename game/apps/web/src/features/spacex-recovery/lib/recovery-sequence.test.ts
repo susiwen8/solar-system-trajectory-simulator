@@ -15,29 +15,25 @@ describe("getRecoveryPhase", () => {
 });
 
 describe("getRecoveryDemoSnapshot", () => {
-  it("keeps the stack aligned through 0.4 and splits immediately after", () => {
-    const beforeBoundary = getRecoveryDemoSnapshot(0.399);
-    const atBoundary = getRecoveryDemoSnapshot(0.4);
-    const afterBoundary = getRecoveryDemoSnapshot(0.401);
+  it("starts the split inside stage-separation and keeps the stack aligned before it", () => {
+    const beforeSeparation = getRecoveryDemoSnapshot(0.259);
+    const duringSeparation = getRecoveryDemoSnapshot(0.35);
 
-    expect(getRecoveryPhase(0.399).id).toBe("stage-separation");
-    expect(getRecoveryPhase(0.4).id).toBe("first-stage-boostback");
+    expect(getRecoveryPhase(0.259).id).toBe("pitch-and-ascent");
+    expect(getRecoveryPhase(0.35).id).toBe("stage-separation");
 
-    expect(beforeBoundary.firstStage.transform.position).toEqual(
-      beforeBoundary.secondStage.transform.position,
+    expect(beforeSeparation.firstStage.transform.position).toEqual(
+      beforeSeparation.secondStage.transform.position,
     );
-    expect(beforeBoundary.firstStage.transform.rotation).toEqual(
-      beforeBoundary.secondStage.transform.rotation,
+    expect(beforeSeparation.firstStage.transform.rotation).toEqual(
+      beforeSeparation.secondStage.transform.rotation,
     );
 
-    expect(atBoundary.firstStage.transform.position).toEqual(atBoundary.secondStage.transform.position);
-    expect(atBoundary.firstStage.transform.rotation).toEqual(atBoundary.secondStage.transform.rotation);
-
-    expect(afterBoundary.firstStage.transform.position).not.toEqual(
-      afterBoundary.secondStage.transform.position,
+    expect(duringSeparation.firstStage.transform.position).not.toEqual(
+      duringSeparation.secondStage.transform.position,
     );
-    expect(afterBoundary.firstStage.transform.rotation).not.toEqual(
-      afterBoundary.secondStage.transform.rotation,
+    expect(duringSeparation.firstStage.transform.rotation).not.toEqual(
+      duringSeparation.secondStage.transform.rotation,
     );
   });
 

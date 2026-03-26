@@ -156,11 +156,12 @@ const ATTACHED_STACK_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   { progress: 0, position: [0, 0, 0], rotation: [0, 0, 0] },
   { progress: 0.1, position: [10, 8, 0], rotation: [0.04, 0, 0] },
   { progress: 0.26, position: [34, 32, 0], rotation: [0.1, 0.03, 0.01] },
-  { progress: 0.4, position: [86, 76, 0], rotation: [0.18, 0.08, 0.02] },
 ];
 
 const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
+  { progress: 0.34, position: [54, 48, -1], rotation: [0.22, 0.1, 0] },
+  { progress: 0.4, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
   { progress: 0.58, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
   { progress: 0.78, position: [28, 24, -4], rotation: [0.2, 0.08, -0.05] },
   { progress: 0.9, position: [12, 10, -1], rotation: [0.08, 0.03, -0.02] },
@@ -169,6 +170,8 @@ const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
 
 const SECOND_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
+  { progress: 0.34, position: [70, 64, 1], rotation: [0.14, 0.05, 0.02] },
+  { progress: 0.4, position: [86, 76, 0], rotation: [0.14, 0.05, 0.01] },
   { progress: 0.58, position: [112, 102, 4], rotation: [0.12, 0.03, 0.01] },
   { progress: 0.78, position: [168, 152, 9], rotation: [0.08, 0.02, 0.01] },
   { progress: 0.9, position: [226, 206, 14], rotation: [0.05, 0.01, 0] },
