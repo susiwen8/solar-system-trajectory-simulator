@@ -15,17 +15,29 @@ describe("getRecoveryPhase", () => {
 });
 
 describe("getRecoveryDemoSnapshot", () => {
-  it("separates stages at the same progress point for both transforms", () => {
-    const beforeSeparation = getRecoveryDemoSnapshot(0.39);
-    const afterSeparation = getRecoveryDemoSnapshot(0.44);
+  it("keeps the stack aligned through 0.4 and splits immediately after", () => {
+    const beforeBoundary = getRecoveryDemoSnapshot(0.399);
+    const atBoundary = getRecoveryDemoSnapshot(0.4);
+    const afterBoundary = getRecoveryDemoSnapshot(0.401);
 
-    expect(beforeSeparation.firstStage.transform.position[0]).toBeCloseTo(
-      beforeSeparation.secondStage.transform.position[0],
-      6,
+    expect(getRecoveryPhase(0.399).id).toBe("stage-separation");
+    expect(getRecoveryPhase(0.4).id).toBe("first-stage-boostback");
+
+    expect(beforeBoundary.firstStage.transform.position).toEqual(
+      beforeBoundary.secondStage.transform.position,
     );
-    expect(afterSeparation.firstStage.transform.position[0]).not.toBeCloseTo(
-      afterSeparation.secondStage.transform.position[0],
-      6,
+    expect(beforeBoundary.firstStage.transform.rotation).toEqual(
+      beforeBoundary.secondStage.transform.rotation,
+    );
+
+    expect(atBoundary.firstStage.transform.position).toEqual(atBoundary.secondStage.transform.position);
+    expect(atBoundary.firstStage.transform.rotation).toEqual(atBoundary.secondStage.transform.rotation);
+
+    expect(afterBoundary.firstStage.transform.position).not.toEqual(
+      afterBoundary.secondStage.transform.position,
+    );
+    expect(afterBoundary.firstStage.transform.rotation).not.toEqual(
+      afterBoundary.secondStage.transform.rotation,
     );
   });
 

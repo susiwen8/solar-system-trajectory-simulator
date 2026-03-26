@@ -152,11 +152,15 @@ type CameraKeyframe = {
   target: Vec3;
 };
 
-const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
+const ATTACHED_STACK_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   { progress: 0, position: [0, 0, 0], rotation: [0, 0, 0] },
   { progress: 0.1, position: [10, 8, 0], rotation: [0.04, 0, 0] },
   { progress: 0.26, position: [34, 32, 0], rotation: [0.1, 0.03, 0.01] },
   { progress: 0.4, position: [86, 76, 0], rotation: [0.18, 0.08, 0.02] },
+];
+
+const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
+  ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
   { progress: 0.58, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
   { progress: 0.78, position: [28, 24, -4], rotation: [0.2, 0.08, -0.05] },
   { progress: 0.9, position: [12, 10, -1], rotation: [0.08, 0.03, -0.02] },
@@ -164,10 +168,7 @@ const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
 ];
 
 const SECOND_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
-  { progress: 0, position: [0, 0, 0], rotation: [0, 0, 0] },
-  { progress: 0.1, position: [10, 8, 0], rotation: [0.03, 0, 0] },
-  { progress: 0.26, position: [34, 32, 0], rotation: [0.08, 0.02, 0] },
-  { progress: 0.4, position: [86, 76, 0], rotation: [0.14, 0.05, 0.01] },
+  ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
   { progress: 0.58, position: [112, 102, 4], rotation: [0.12, 0.03, 0.01] },
   { progress: 0.78, position: [168, 152, 9], rotation: [0.08, 0.02, 0.01] },
   { progress: 0.9, position: [226, 206, 14], rotation: [0.05, 0.01, 0] },
@@ -223,6 +224,7 @@ export function getRecoveryPhase(progress: number): RecoveryPhase {
 export function getRecoveryDemoSnapshot(progress: number): RecoveryDemoSnapshot {
   const clampedProgress = clampProgress(progress);
   const activePhase = getRecoveryPhase(clampedProgress);
+  const camera = sampleCameraState(CAMERA_KEYFRAMES, clampedProgress);
 
   return {
     progress: clampedProgress,
@@ -235,8 +237,8 @@ export function getRecoveryDemoSnapshot(progress: number): RecoveryDemoSnapshot 
     },
     camera: {
       mode: activePhase.cameraMode,
-      position: sampleCameraState(CAMERA_KEYFRAMES, clampedProgress).position,
-      target: sampleCameraState(CAMERA_KEYFRAMES, clampedProgress).target,
+      position: camera.position,
+      target: camera.target,
     },
     trajectory: {
       stageOne: {
@@ -255,18 +257,26 @@ export function getRecoveryDemoSnapshot(progress: number): RecoveryDemoSnapshot 
   };
 }
 
-function sampleCameraState(keyframes: CameraKeyframe[], progress: number): CameraKeyframe {
+function sampleCameraState(
+  keyframes: CameraKeyframe[],
+  progress: number,
+): Pick<RecoveryCameraState, "position" | "target"> {
   return {
-    position: sampleVec3(keyframes.map(({ progress: keyframeProgress, position }) => ({
-      progress: keyframeProgress,
-      value: position,
-    })), progress),
-    target: sampleVec3(keyframes.map(({ progress: keyframeProgress, target }) => ({
-      progress: keyframeProgress,
-      value: target,
-    })), progress),
-    progress,
-  } as unknown as CameraKeyframe;
+    position: sampleVec3(
+      keyframes.map(({ progress: keyframeProgress, position }) => ({
+        progress: keyframeProgress,
+        value: position,
+      })),
+      progress,
+    ),
+    target: sampleVec3(
+      keyframes.map(({ progress: keyframeProgress, target }) => ({
+        progress: keyframeProgress,
+        value: target,
+      })),
+      progress,
+    ),
+  };
 }
 
 function sampleTransform(keyframes: TransformKeyframe[], progress: number): RecoveryTransform {
