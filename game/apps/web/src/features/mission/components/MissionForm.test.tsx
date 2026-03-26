@@ -21,6 +21,12 @@ it("starts with mars selected by default", () => {
   expect(screen.getByRole("checkbox", { name: "火星" })).toBeChecked();
 });
 
+it("renders the return-to-earth toggle disabled by default", () => {
+  render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
+
+  expect(screen.getByRole("checkbox", { name: "返回地球" })).not.toBeChecked();
+});
+
 it("defaults to recommended launch window mode", () => {
   render(<MissionForm onSubmit={vi.fn()} language="zh" loading={false} />);
 
@@ -80,6 +86,32 @@ it("submits a tour request in manual mode when multiple bodies are selected", as
       launchPlanning: expect.objectContaining({
         mode: "manual",
         earliestLaunchEpoch: "2026-03-01T00:00:00Z",
+      }),
+    }),
+  );
+});
+
+it("submits a tour request in manual mode when one body is selected and return-to-earth is enabled", async () => {
+  const onSubmit = vi.fn();
+  render(<MissionForm onSubmit={onSubmit} language="en" loading={false} />);
+
+  await userEvent.click(screen.getByRole("checkbox", { name: "Return to Earth" }));
+  await userEvent.selectOptions(screen.getByLabelText("Launch Planning"), "manual");
+  fireEvent.change(screen.getByLabelText("Launch Epoch"), { target: { value: "2026-11-20" } });
+  await userEvent.click(screen.getByRole("button", { name: "Propagate Trajectory" }));
+
+  expect(onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "tour",
+      request: expect.objectContaining({
+        departureBody: "earth",
+        requiredVisitBodies: ["mars"],
+        launchEpoch: "2026-11-20T00:00:00Z",
+        returnToDeparture: true,
+      }),
+      launchPlanning: expect.objectContaining({
+        mode: "manual",
+        earliestLaunchEpoch: "2026-11-20T00:00:00Z",
       }),
     }),
   );

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import App from "./App";
@@ -616,6 +616,71 @@ it("shows the mission metrics panel after propagation results load", async () =>
   expect(fetchSpy).toHaveBeenLastCalledWith("/ephemeris/bodies?epoch=2026-01-01T06%3A00%3A00.000Z");
 });
 
+it("includes returnToDeparture in launch-window and plan-tour requests", async () => {
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(createEphemerisResponse())
+    .mockResolvedValueOnce(createLaunchWindowResponse())
+    .mockResolvedValueOnce(
+      createJsonResponse({
+        referenceFrame: "heliocentric-inertial",
+        ephemerisSource: "bundled-keplerian",
+        samples: [
+          {
+            epochSeconds: 0,
+            positionKm: [149597870.7, 0, 0],
+            velocityKmPerSec: [0, 29.78, 0],
+          },
+        ],
+        closestApproach: {
+          bodyId: "earth",
+          distanceKm: 1200,
+          epochSeconds: 0,
+        },
+        flightTimeSeconds: 86_400,
+        warnings: [],
+        visitOrder: ["mars"],
+        fullSequenceBodies: ["earth", "mars", "earth"],
+        score: 4.2,
+        deltaVKmPerS: 3.1,
+        flybyEvents: [],
+        visitEvents: [],
+        legs: [],
+        segments: [],
+        candidates: [],
+      }),
+    )
+    .mockResolvedValueOnce(createEphemerisResponse({ epoch: "2026-01-01T00:00:00.000Z" }));
+
+  render(<App />);
+
+  await userEvent.click(screen.getByRole("checkbox", { name: "返回地球" }));
+  await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
+
+  await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(4));
+
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe("/missions/launch-window");
+  expect(JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body))).toEqual(
+    expect.objectContaining({
+      missionType: "tour",
+      departureBody: "earth",
+      requiredVisitBodies: ["mars"],
+      returnToDeparture: true,
+    }),
+  );
+
+  expect(fetchSpy.mock.calls[2]?.[0]).toBe("/missions/plan-tour");
+  expect(JSON.parse(String(fetchSpy.mock.calls[2]?.[1]?.body))).toEqual(
+    expect.objectContaining({
+      departureBody: "earth",
+      requiredVisitBodies: ["mars"],
+      returnToDeparture: true,
+    }),
+  );
+
+  expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 火星 -> 地球"))).toBeInTheDocument();
+});
+
 it("keeps the clicked phase jump highlighted when a short phase has no dedicated sample", async () => {
   vi.spyOn(globalThis, "fetch")
     .mockResolvedValueOnce(createEphemerisResponse())
@@ -1206,38 +1271,30 @@ it("plans a multi-planet tour from the unified selector and renders ranked tour 
   await userEvent.click(screen.getByRole("checkbox", { name: "土星" }));
   await userEvent.click(screen.getByRole("button", { name: "计算轨迹" }));
 
-  expect(fetchSpy).toHaveBeenCalledWith(
-    "/missions/launch-window",
-    expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({
-        missionType: "tour",
-        departureBody: "earth",
-        requiredVisitBodies: ["venus", "jupiter", "saturn"],
-        earliestLaunchEpoch: "2026-01-01T00:00:00Z",
-        maxAssistBodiesPerLeg: 2,
-        maxReturnedCandidates: 5,
-        allowAssistBodies: true,
-        allowRepeatedFlybys: true,
-      })
-    }),
-  );
+  expect(fetchSpy.mock.calls[1]?.[0]).toBe("/missions/launch-window");
+  expect(JSON.parse(String(fetchSpy.mock.calls[1]?.[1]?.body))).toEqual({
+    missionType: "tour",
+    departureBody: "earth",
+    requiredVisitBodies: ["venus", "jupiter", "saturn"],
+    earliestLaunchEpoch: "2026-01-01T00:00:00Z",
+    maxAssistBodiesPerLeg: 2,
+    maxReturnedCandidates: 5,
+    allowAssistBodies: true,
+    allowRepeatedFlybys: true,
+    returnToDeparture: false,
+  });
 
-  expect(fetchSpy).toHaveBeenCalledWith(
-    "/missions/plan-tour",
-    expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({
-        departureBody: "earth",
-        requiredVisitBodies: ["venus", "jupiter", "saturn"],
-        launchEpoch: "2026-01-01T00:00:00Z",
-        maxAssistBodiesPerLeg: 2,
-        maxReturnedCandidates: 5,
-        allowAssistBodies: true,
-        allowRepeatedFlybys: true
-      })
-    }),
-  );
+  expect(fetchSpy.mock.calls[2]?.[0]).toBe("/missions/plan-tour");
+  expect(JSON.parse(String(fetchSpy.mock.calls[2]?.[1]?.body))).toEqual({
+    departureBody: "earth",
+    requiredVisitBodies: ["venus", "jupiter", "saturn"],
+    launchEpoch: "2026-01-01T00:00:00Z",
+    returnToDeparture: false,
+    maxAssistBodiesPerLeg: 2,
+    maxReturnedCandidates: 5,
+    allowAssistBodies: true,
+    allowRepeatedFlybys: true,
+  });
 
   expect(await screen.findByText("引力辅助候选方案")).toBeInTheDocument();
   expect(await screen.findByText(hasExactTextContent("序列: 地球 -> 金星 -> 木星 -> 土星"))).toBeInTheDocument();

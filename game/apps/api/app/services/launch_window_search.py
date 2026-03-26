@@ -116,6 +116,7 @@ class LaunchWindowSearchService:
         max_returned_candidates: int = 5,
         allow_assist_bodies: bool = True,
         allow_repeated_flybys: bool = True,
+        return_to_departure: bool = False,
         propulsion_config: Optional[PropulsionConfig] = None,
     ) -> LaunchWindowResult:
         search_start = earliest_launch_epoch or DEFAULT_EARLIEST_LAUNCH_EPOCH
@@ -132,6 +133,7 @@ class LaunchWindowSearchService:
             max_returned_candidates=max_returned_candidates,
             allow_assist_bodies=allow_assist_bodies,
             allow_repeated_flybys=allow_repeated_flybys,
+            return_to_departure=return_to_departure,
             propulsion_config=propulsion_config,
             candidate_cache=candidate_cache,
         )
@@ -144,6 +146,7 @@ class LaunchWindowSearchService:
             max_returned_candidates=max_returned_candidates,
             allow_assist_bodies=allow_assist_bodies,
             allow_repeated_flybys=allow_repeated_flybys,
+            return_to_departure=return_to_departure,
             propulsion_config=propulsion_config,
             candidate_cache=candidate_cache,
         )
@@ -211,6 +214,7 @@ class LaunchWindowSearchService:
         max_returned_candidates: int,
         allow_assist_bodies: bool,
         allow_repeated_flybys: bool,
+        return_to_departure: bool,
         propulsion_config: Optional[PropulsionConfig],
         candidate_cache: Optional[dict[str, LaunchWindowCandidate]] = None,
     ) -> Tuple[LaunchWindowCandidate, ...]:
@@ -228,6 +232,7 @@ class LaunchWindowSearchService:
                     max_returned_candidates=max_returned_candidates,
                     allow_assist_bodies=allow_assist_bodies,
                     allow_repeated_flybys=allow_repeated_flybys,
+                    return_to_departure=return_to_departure,
                     propulsion_config=propulsion_config,
                 )
             except Exception:

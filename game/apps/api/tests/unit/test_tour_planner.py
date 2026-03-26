@@ -45,6 +45,26 @@ def test_tour_planner_can_choose_non_input_visit_order() -> None:
     assert tuple(candidates[0].visit_order) != ("saturn", "venus", "jupiter")
 
 
+def test_tour_planner_appends_earth_return_leg_when_enabled() -> None:
+    planner = build_planner()
+
+    candidates = planner.plan_tour(
+        departure_body="earth",
+        required_visit_bodies=("mars",),
+        launch_epoch="2026-01-01T00:00:00Z",
+        return_to_departure=True,
+    )
+
+    assert candidates
+    candidate = candidates[0]
+    assert candidate.visit_order == ("mars",)
+    assert candidate.full_sequence_bodies[0] == "earth"
+    assert candidate.full_sequence_bodies[-1] == "earth"
+    assert candidate.legs[-1].end_body == "earth"
+    assert candidate.closest_approach["bodyId"] == "earth"
+    assert candidate.visit_events[-1].body_id == "earth"
+
+
 def test_tour_planner_respects_assist_limit_per_leg() -> None:
     planner = build_planner()
 

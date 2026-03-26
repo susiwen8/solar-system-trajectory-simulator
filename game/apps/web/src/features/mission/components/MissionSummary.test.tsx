@@ -2,6 +2,10 @@ import { render, screen } from "@testing-library/react";
 
 import MissionSummary from "./MissionSummary";
 
+function hasExactTextContent(text: string) {
+  return (_content: string, node: Element | null) => node?.textContent === text;
+}
+
 const result = {
   referenceFrame: "heliocentric-inertial",
   ephemerisSource: "bundled-keplerian",
@@ -224,6 +228,26 @@ describe("MissionSummary", () => {
     expect(screen.getByText(/Delta-v: 0.0079 km\/s/)).toBeInTheDocument();
     expect(screen.getByText(/Turn Angle: 28/)).toBeInTheDocument();
     expect(screen.getByText(/Periapsis Altitude: 75,000 km/)).toBeInTheDocument();
+  });
+
+  it("shows the closed-loop route when the mission returns to earth", () => {
+    render(
+      <MissionSummary
+        result={{
+          ...result,
+          closestApproach: {
+            bodyId: "earth",
+            distanceKm: 1200,
+            epochSeconds: 900000,
+          },
+          visitOrder: ["mars"],
+          fullSequenceBodies: ["earth", "mars", "earth"],
+        }}
+        language="en"
+      />,
+    );
+
+    expect(screen.getByText(hasExactTextContent(": earth -> mars -> earth"))).toBeInTheDocument();
   });
 
   it("renders navigation metrics when telemetry is enabled", () => {

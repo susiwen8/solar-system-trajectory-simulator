@@ -24,6 +24,10 @@ function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
 }
 
 function resolveVisitSequenceBodies(route: RouteDescriptor): string[] {
+  if (isClosedLoopRoute(route)) {
+    return resolveFullSequenceBodies(route);
+  }
+
   if (route.visitOrder?.length) {
     return ["earth", ...route.visitOrder];
   }
@@ -45,6 +49,11 @@ function resolveFullSequenceBodies(route: RouteDescriptor): string[] {
   }
 
   return route.sequenceBodies?.length ? route.sequenceBodies : [];
+}
+
+function isClosedLoopRoute(route: RouteDescriptor): boolean {
+  const fullSequence = resolveFullSequenceBodies(route);
+  return fullSequence.length > 1 && fullSequence[0] === "earth" && fullSequence[fullSequence.length - 1] === "earth";
 }
 
 function formatBodySequence(language: Language, bodyIds: string[]): string {

@@ -301,6 +301,10 @@ function materializeCandidate(result: TrajectoryResult, candidate: MissionCandid
 }
 
 function resolveVisitSequenceBodies(route: Pick<MissionCandidate, "sequenceBodies" | "fullSequenceBodies" | "visitOrder">): string[] {
+  if (isClosedLoopRoute(route)) {
+    return resolveFullSequenceBodies(route);
+  }
+
   if (route.visitOrder?.length) {
     return ["earth", ...route.visitOrder];
   }
@@ -332,6 +336,7 @@ function buildLaunchWindowRequest(submission: MissionSubmission): LaunchWindowRe
     maxReturnedCandidates: submission.request.maxReturnedCandidates,
     allowAssistBodies: submission.request.allowAssistBodies,
     allowRepeatedFlybys: submission.request.allowRepeatedFlybys,
+    returnToDeparture: submission.request.returnToDeparture,
     propulsionConfig: submission.request.propulsionConfig,
   };
 }
@@ -342,6 +347,11 @@ function resolveFullSequenceBodies(route: Pick<MissionCandidate, "sequenceBodies
   }
 
   return route.sequenceBodies ?? [];
+}
+
+function isClosedLoopRoute(route: Pick<MissionCandidate, "sequenceBodies" | "fullSequenceBodies">): boolean {
+  const fullSequence = resolveFullSequenceBodies(route);
+  return fullSequence.length > 1 && fullSequence[0] === "earth" && fullSequence[fullSequence.length - 1] === "earth";
 }
 
 function shouldShowFullSequence(candidate: MissionCandidate): boolean {
