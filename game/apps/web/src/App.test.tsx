@@ -5,8 +5,13 @@ import App from "./App";
 
 const EMPTY_PREVIEW_EPOCH = "2026-01-01T00:00:00Z";
 
+beforeEach(() => {
+  window.history.replaceState({}, "", "/");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  window.history.replaceState({}, "", "/");
 });
 
 function hasExactTextContent(text: string) {
@@ -88,6 +93,32 @@ function createLaunchWindowResponse(overrides: Partial<Record<string, unknown>> 
       ...overrides,
     });
 }
+
+function renderAtPath(pathname: string) {
+  window.history.pushState({}, "", pathname);
+  return render(<App />);
+}
+
+it("renders the simulator page at /", () => {
+  renderAtPath("/");
+
+  expect(screen.getByRole("heading", { name: "太阳系轨迹模拟器" })).toBeInTheDocument();
+});
+
+it("renders the recovery page at /spacex-recovery", () => {
+  renderAtPath("/spacex-recovery");
+
+  expect(screen.getByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
+  expect(screen.getByText("回收任务占位页")).toBeInTheDocument();
+});
+
+it("updates browser history when switching pages from the nav", async () => {
+  renderAtPath("/");
+
+  await userEvent.click(screen.getByRole("link", { name: "回收任务" }));
+
+  expect(window.location.pathname).toBe("/spacex-recovery");
+});
 
 it("renders the simulator heading", () => {
   render(<App />);
