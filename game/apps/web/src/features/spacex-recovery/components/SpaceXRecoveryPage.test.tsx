@@ -119,4 +119,14 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(screen.getByTestId("recovery-scene")).toHaveAttribute("data-phase", "liftoff");
   });
+
+  it("renders localized Chinese phase copy when the page language is zh", () => {
+    mockMatchMedia(true);
+    renderRecoveryPage("zh");
+
+    expect(screen.getByRole("heading", { name: "一级起飞" })).toBeInTheDocument();
+    expect(screen.getByText("一级与二级作为整套箭体一起离开发射台。")).toBeInTheDocument();
+    expect(screen.getByText("镜头保持近距离仰视，突出推力和尺度感。").closest("li")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "开始" })).toBeInTheDocument();
+  });
 });
