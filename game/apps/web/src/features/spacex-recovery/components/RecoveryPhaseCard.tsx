@@ -8,14 +8,15 @@ type RecoveryPhaseCardProps = {
 
 export default function RecoveryPhaseCard({ language, snapshot }: RecoveryPhaseCardProps) {
   const copy = t(language);
+  const [phaseSummary, ...phaseHighlights] = snapshot.phaseHighlights;
 
   return (
     <section className="recovery-phase-card" aria-label={copy.recoveryPhaseLabel}>
       <p className="eyebrow">{copy.recoveryPhaseLabel}</p>
       <h2>{snapshot.activePhase.label}</h2>
-      <p>{copy.recoveryPhaseBody}</p>
+      <p>{phaseSummary ?? copy.recoveryPhaseBody}</p>
       <ul>
-        {snapshot.phaseHighlights.map((highlight) => (
+        {phaseHighlights.map((highlight) => (
           <li key={highlight}>{highlight}</li>
         ))}
       </ul>

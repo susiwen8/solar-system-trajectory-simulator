@@ -63,8 +63,11 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Liftoff" })).toBeInTheDocument();
     expect(
-      screen.getByText("Liftoff: both stages rise together as the stack clears the pad."),
-    ).toBeInTheDocument();
+      screen.getByText("Liftoff: both stages rise together as the stack clears the pad.").closest("li"),
+    ).toBeNull();
+    expect(
+      screen.getByText("Liftoff: the demo starts with the launch frame held close to the tower.").closest("li"),
+    ).not.toBeNull();
     expect(screen.getByTestId("recovery-scene")).toHaveAttribute("data-phase", "liftoff");
 
     await act(async () => {
