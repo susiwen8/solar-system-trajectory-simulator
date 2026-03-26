@@ -63,10 +63,10 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Liftoff" })).toBeInTheDocument();
     expect(
-      screen.getByText("Liftoff: both stages rise together as the stack clears the pad.").closest("li"),
+      screen.getByText("Both stages rise together as the stack clears the pad.").closest("li"),
     ).toBeNull();
     expect(
-      screen.getByText("Liftoff: the demo starts with the launch frame held close to the tower.").closest("li"),
+      screen.getByText("The launch frame stays tight to emphasize thrust and scale.").closest("li"),
     ).not.toBeNull();
     expect(screen.getByTestId("recovery-scene")).toHaveAttribute("data-phase", "liftoff");
 
@@ -101,6 +101,7 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByRole("heading", { name: "Liftoff" })).toBeInTheDocument();
     expect(screen.getByTestId("recovery-scene")).toHaveAttribute("data-phase", "liftoff");
     expect(screen.getByRole("slider", { name: "Playback Step" })).toHaveProperty("value", "0");
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
   it("starts paused when prefers-reduced-motion is enabled", async () => {
