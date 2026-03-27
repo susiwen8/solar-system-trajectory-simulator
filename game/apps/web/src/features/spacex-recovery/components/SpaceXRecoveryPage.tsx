@@ -40,7 +40,7 @@ const RECOVERY_PHASE_CONTENT: Record<Language, Record<RecoveryPhaseId, Localized
     },
     "first-stage-boostback": {
       title: "First-Stage Boostback",
-      summary: "The booster bends back toward the recovery corridor while the upper stage keeps leaving.",
+      summary: "The booster bends toward the offshore drone-ship corridor while the upper stage keeps leaving.",
       highlights: ["This phase makes the return arc visible instead of treating it as a static pause."],
     },
     "first-stage-atmospheric-return": {
@@ -50,8 +50,8 @@ const RECOVERY_PHASE_CONTENT: Record<Language, Record<RecoveryPhaseId, Localized
     },
     "landing-burn-and-touchdown": {
       title: "Landing Burn and Touchdown",
-      summary: "The returning booster slows for the final descent and settles onto the landing zone.",
-      highlights: ["The overview framing keeps the booster landing and upper-stage path connected."],
+      summary: "The returning booster slows for the final descent and settles onto the drone-ship deck.",
+      highlights: ["The overview framing keeps the drone-ship landing and upper-stage path connected."],
     },
     "second-stage-orbital-continuation": {
       title: "Second-Stage Orbital Continuation",
@@ -77,7 +77,7 @@ const RECOVERY_PHASE_CONTENT: Record<Language, Record<RecoveryPhaseId, Localized
     },
     "first-stage-boostback": {
       title: "一级返向点火",
-      summary: "一级助推器开始朝回收走廊折返，而二级继续向前增速。",
+      summary: "一级助推器开始朝海上无人船所在的回收走廊折返，而二级继续向前增速。",
       highlights: ["这一段会明确展示一级开始“往回拐”的轨迹变化。"],
     },
     "first-stage-atmospheric-return": {
@@ -87,8 +87,8 @@ const RECOVERY_PHASE_CONTENT: Record<Language, Record<RecoveryPhaseId, Localized
     },
     "landing-burn-and-touchdown": {
       title: "着陆点火与落地",
-      summary: "一级在最后阶段减速，对准回收平台或着陆区完成落地。",
-      highlights: ["拉远镜头会同时保留回收动作和二级远去的关系。"],
+      summary: "一级在最后阶段减速，对准海上无人船甲板完成落地。",
+      highlights: ["拉远镜头会同时保留海上无人船回收动作和二级远去的关系。"],
     },
     "second-stage-orbital-continuation": {
       title: "二级继续入轨",

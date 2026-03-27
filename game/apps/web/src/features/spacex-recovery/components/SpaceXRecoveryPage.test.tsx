@@ -139,4 +139,16 @@ describe("SpaceXRecoveryPage", () => {
     expect(screen.getByTestId("spacex-recovery-scene")).toBeInTheDocument();
     expect(screen.getByText("当前环境无法显示 3D 画面。")).toBeInTheDocument();
   });
+
+  it("describes the landing phase as an offshore drone-ship recovery in Chinese", () => {
+    mockMatchMedia(true);
+    renderRecoveryPage("zh");
+
+    fireEvent.change(screen.getByRole("slider", { name: "回放步进" }), {
+      target: { value: "0.82" },
+    });
+
+    expect(screen.getByRole("heading", { name: "着陆点火与落地" })).toBeInTheDocument();
+    expect(screen.getByText("一级在最后阶段减速，对准海上无人船甲板完成落地。")).toBeInTheDocument();
+  });
 });

@@ -77,6 +77,19 @@ describe("getRecoveryDemoSnapshot", () => {
     );
   });
 
+  it("lands the booster downrange on an offshore recovery target instead of the launch site", () => {
+    const launch = getRecoveryDemoSnapshot(0);
+    const touchdown = getRecoveryDemoSnapshot(1);
+
+    expect(touchdown.activePhase.id).toBe("second-stage-orbital-continuation");
+    expect(touchdown.firstStage.transform.position[0]).toBeGreaterThan(
+      launch.firstStage.transform.position[0] + 20,
+    );
+    expect(touchdown.firstStage.transform.position).not.toEqual(
+      launch.firstStage.transform.position,
+    );
+  });
+
   it("exposes explainer bullets for the active phase", () => {
     const snapshot = getRecoveryDemoSnapshot(0.72);
 

@@ -51,7 +51,7 @@ const RECOVERY_SCENE_PHASE_COPY: Record<Language, Record<RecoveryPhaseId, Recove
     },
     "first-stage-boostback": {
       title: "First-Stage Boostback",
-      summary: "The booster bends back toward the recovery corridor as the upper stage keeps accelerating.",
+      summary: "The booster bends toward the offshore drone ship while the upper stage keeps accelerating.",
     },
     "first-stage-atmospheric-return": {
       title: "First-Stage Atmospheric Return",
@@ -59,7 +59,7 @@ const RECOVERY_SCENE_PHASE_COPY: Record<Language, Record<RecoveryPhaseId, Recove
     },
     "landing-burn-and-touchdown": {
       title: "Landing Burn and Touchdown",
-      summary: "The returning booster slows for the last descent and settles onto the landing zone.",
+      summary: "The returning booster slows for the last descent and settles onto the drone-ship deck.",
     },
     "second-stage-orbital-continuation": {
       title: "Second-Stage Orbital Continuation",
@@ -81,7 +81,7 @@ const RECOVERY_SCENE_PHASE_COPY: Record<Language, Record<RecoveryPhaseId, Recove
     },
     "first-stage-boostback": {
       title: "一级返向点火",
-      summary: "一级开始朝回收走廊折返，二级继续向远端加速。",
+      summary: "一级开始朝海上无人船折返，二级继续向远端加速。",
     },
     "first-stage-atmospheric-return": {
       title: "一级大气层返回",
@@ -89,7 +89,7 @@ const RECOVERY_SCENE_PHASE_COPY: Record<Language, Record<RecoveryPhaseId, Recove
     },
     "landing-burn-and-touchdown": {
       title: "着陆点火与落地",
-      summary: "一级在最后阶段减速并对准回收区完成落地。",
+      summary: "一级在最后阶段减速并对准海上无人船甲板完成落地。",
     },
     "second-stage-orbital-continuation": {
       title: "二级继续入轨",
@@ -100,6 +100,7 @@ const RECOVERY_SCENE_PHASE_COPY: Record<Language, Record<RecoveryPhaseId, Recove
 
 const STAGE_HEIGHT = 8;
 const TRAJECTORY_SAMPLE_COUNT = 72;
+const DRONE_SHIP_POSITION: Vec3 = [28, -0.2, -20];
 
 export default function SpaceXRecoveryScene({ language, snapshot }: SpaceXRecoverySceneProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -228,7 +229,8 @@ function createRecoveryRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElemen
     scene.add(recoveryFill);
 
     scene.add(buildSkyDome());
-    scene.add(buildGroundPlane());
+    scene.add(buildOceanSurface());
+    scene.add(buildCoastalShelf());
     scene.add(buildLaunchMount());
 
     const landingZone = buildLandingZone();
@@ -333,18 +335,33 @@ function applyTrajectoryState(line: THREE.Line, progress: number, visible: boole
   }
 }
 
-function buildGroundPlane() {
+function buildOceanSurface() {
   const surface = new THREE.Mesh(
-    new THREE.CircleGeometry(170, 64),
+    new THREE.CircleGeometry(190, 64),
     new THREE.MeshStandardMaterial({
-      color: "#0b2235",
-      metalness: 0.1,
-      roughness: 0.88,
+      color: "#0a2742",
+      emissive: "#0a2b4a",
+      emissiveIntensity: 0.18,
+      metalness: 0.08,
+      roughness: 0.4,
     }),
   );
   surface.rotation.x = -Math.PI / 2;
   surface.position.y = -0.04;
   return surface;
+}
+
+function buildCoastalShelf() {
+  const shelf = new THREE.Mesh(
+    new THREE.BoxGeometry(56, 2.2, 30),
+    new THREE.MeshStandardMaterial({
+      color: "#16344a",
+      metalness: 0.12,
+      roughness: 0.8,
+    }),
+  );
+  shelf.position.set(2, -1.1, 17);
+  return shelf;
 }
 
 function buildSkyDome() {
@@ -391,14 +408,40 @@ function buildLaunchMount() {
 
 function buildLandingZone() {
   const material = new THREE.MeshStandardMaterial({
-    color: "#153450",
+    color: "#234766",
     emissive: "#6dc1ff",
     emissiveIntensity: 0.3,
     metalness: 0.24,
-    roughness: 0.52,
+    roughness: 0.48,
   });
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.5, 1.2, 28), material);
-  mesh.position.set(4, -0.6, 0);
+  const hullMaterial = new THREE.MeshStandardMaterial({
+    color: "#102233",
+    metalness: 0.28,
+    roughness: 0.62,
+  });
+  const stripeMaterial = new THREE.MeshBasicMaterial({
+    color: "#f5a44a",
+  });
+
+  const mesh = new THREE.Group();
+
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(18, 2.4, 8), hullMaterial);
+  hull.position.set(DRONE_SHIP_POSITION[0], -1.2, DRONE_SHIP_POSITION[2]);
+
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(15, 0.9, 6), material);
+  deck.position.set(DRONE_SHIP_POSITION[0], 0.1, DRONE_SHIP_POSITION[2]);
+
+  const landingStripe = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.8, 32), stripeMaterial);
+  landingStripe.rotation.x = -Math.PI / 2;
+  landingStripe.position.set(DRONE_SHIP_POSITION[0], 0.56, DRONE_SHIP_POSITION[2]);
+
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.8, 2.4), hullMaterial);
+  bridge.position.set(DRONE_SHIP_POSITION[0] - 4.8, 1.05, DRONE_SHIP_POSITION[2] + 1.3);
+
+  mesh.add(hull);
+  mesh.add(deck);
+  mesh.add(landingStripe);
+  mesh.add(bridge);
   return {
     material,
     mesh,
@@ -524,8 +567,10 @@ function buildStarField() {
 }
 
 function resolveWebGlContext(canvas: HTMLCanvasElement) {
-  // jsdom never provides a WebGL context, so skip the noisy not-implemented branch in tests.
-  if (typeof navigator !== "undefined" && /\bjsdom\b/i.test(navigator.userAgent)) {
+  if (
+    typeof WebGLRenderingContext === "undefined" &&
+    typeof WebGL2RenderingContext === "undefined"
+  ) {
     return null;
   }
 

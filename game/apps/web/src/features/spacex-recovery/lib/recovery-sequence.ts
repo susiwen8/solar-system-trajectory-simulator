@@ -96,7 +96,7 @@ export const RECOVERY_PHASES: RecoveryPhase[] = [
     endProgress: 0.58,
     cameraMode: "side-follow",
     highlights: [
-      "First-Stage Boostback: the booster turns back toward the recovery corridor.",
+      "First-Stage Boostback: the booster turns toward the offshore drone-ship recovery corridor.",
       "First-Stage Boostback: the upper stage keeps accelerating outward.",
     ],
   },
@@ -118,8 +118,8 @@ export const RECOVERY_PHASES: RecoveryPhase[] = [
     endProgress: 0.9,
     cameraMode: "recovery-overview",
     highlights: [
-      "Landing Burn and Touchdown: the booster slows for the final descent.",
-      "Landing Burn and Touchdown: the overview framing helps connect both vehicles.",
+      "Landing Burn and Touchdown: the booster slows for the final descent onto the drone ship.",
+      "Landing Burn and Touchdown: the overview framing keeps the offshore recovery target readable.",
     ],
   },
   {
@@ -161,11 +161,11 @@ const ATTACHED_STACK_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
 const FIRST_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
   ...ATTACHED_STACK_TRANSFORM_KEYFRAMES,
   { progress: 0.34, position: [54, 48, -1], rotation: [0.22, 0.1, 0] },
-  { progress: 0.4, position: [62, 54, -2], rotation: [0.34, 0.12, -0.03] },
-  { progress: 0.58, position: [44, 40, -3], rotation: [0.46, 0.18, -0.07] },
-  { progress: 0.78, position: [28, 24, -4], rotation: [0.2, 0.08, -0.05] },
-  { progress: 0.9, position: [12, 10, -1], rotation: [0.08, 0.03, -0.02] },
-  { progress: 1, position: [4, 4, 0], rotation: [0, 0, 0] },
+  { progress: 0.4, position: [62, 54, -4], rotation: [0.34, 0.12, -0.03] },
+  { progress: 0.58, position: [46, 38, -10], rotation: [0.46, 0.18, -0.08] },
+  { progress: 0.78, position: [38, 18, -16], rotation: [0.2, 0.08, -0.06] },
+  { progress: 0.9, position: [32, 7, -19], rotation: [0.08, 0.03, -0.02] },
+  { progress: 1, position: [28, 0.8, -20], rotation: [0, 0, 0] },
 ];
 
 const SECOND_STAGE_TRANSFORM_KEYFRAMES: TransformKeyframe[] = [
@@ -203,10 +203,10 @@ const CAMERA_KEYFRAMES: CameraKeyframe[] = [
   { progress: 0.1, position: [-20, 17, -29], target: [8, 7, 0] },
   { progress: 0.26, position: [-16, 18, -31], target: [34, 32, 0] },
   { progress: 0.4, position: [-22, 20, -34], target: [86, 76, 0] },
-  { progress: 0.58, position: [-30, 22, -38], target: [68, 58, 0] },
-  { progress: 0.78, position: [-44, 28, -46], target: [44, 36, -1] },
-  { progress: 0.9, position: [-66, 40, -58], target: [140, 128, 10] },
-  { progress: 1, position: [-82, 48, -66], target: [216, 196, 16] },
+  { progress: 0.58, position: [-30, 22, -40], target: [60, 46, -8] },
+  { progress: 0.78, position: [-42, 26, -48], target: [52, 18, -15] },
+  { progress: 0.9, position: [-58, 34, -58], target: [92, 64, -4] },
+  { progress: 1, position: [-82, 48, -66], target: [200, 188, 12] },
 ];
 
 export function getRecoveryPhase(progress: number): RecoveryPhase {

@@ -25,5 +25,8 @@ describe("SpaceXRecoveryScene", () => {
 
     expect(screen.getByText("当前环境无法显示 3D 画面。")).toBeInTheDocument();
     expect(screen.getByText("一级大气层返回")).toBeInTheDocument();
+    expect(
+      screen.getByText("即使 WebGL 不可用，当前阶段和海上无人船回收叙事也会继续显示。"),
+    ).toBeInTheDocument();
   });
 });
