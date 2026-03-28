@@ -194,6 +194,7 @@ class MissionTourRequest(BaseModel):
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
     allowAssistBodies: bool = True
     allowRepeatedFlybys: bool = True
+    returnToDeparture: bool = False
     propulsionConfig: Optional[PropulsionConfig] = None
     navigationConfig: Optional[NavigationConfig] = None
 
@@ -217,6 +218,7 @@ class LaunchWindowRequest(BaseModel):
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
     allowAssistBodies: bool = True
     allowRepeatedFlybys: bool = True
+    returnToDeparture: bool = False
     propulsionConfig: Optional[PropulsionConfig] = None
 
     @model_validator(mode="after")

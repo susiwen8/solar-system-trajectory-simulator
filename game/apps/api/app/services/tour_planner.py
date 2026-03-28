@@ -139,6 +139,7 @@ class MissionTourPlanner:
         max_returned_candidates: int = 5,
         allow_assist_bodies: bool = True,
         allow_repeated_flybys: bool = True,
+        return_to_departure: bool = False,
         propulsion_config: Optional[PropulsionConfig] = None,
         navigation_config: Optional[NavigationConfig] = None,
     ) -> List[MissionTourCandidate]:
@@ -153,6 +154,7 @@ class MissionTourPlanner:
                 launch_epoch=launch_epoch,
                 max_assist_bodies_per_leg=max_assist_bodies_per_leg if allow_assist_bodies else 0,
                 allow_repeated_flybys=allow_repeated_flybys,
+                return_to_departure=return_to_departure,
                 propulsion_config=propulsion_config,
                 navigation_config=navigation_config,
                 leg_candidate_cache=leg_candidate_cache,
@@ -172,6 +174,7 @@ class MissionTourPlanner:
         max_returned_candidates: int = 5,
         allow_assist_bodies: bool = True,
         allow_repeated_flybys: bool = True,
+        return_to_departure: bool = False,
         propulsion_config: Optional[PropulsionConfig] = None,
     ) -> List[MissionTourEstimate]:
         del propulsion_config
@@ -186,6 +189,7 @@ class MissionTourPlanner:
                 launch_epoch=launch_epoch,
                 max_assist_bodies_per_leg=max_assist_bodies_per_leg if allow_assist_bodies else 0,
                 allow_repeated_flybys=allow_repeated_flybys,
+                return_to_departure=return_to_departure,
                 leg_candidate_cache=leg_candidate_cache,
             )
             if candidate is not None:
@@ -224,13 +228,20 @@ class MissionTourPlanner:
         launch_epoch: str,
         max_assist_bodies_per_leg: int,
         allow_repeated_flybys: bool,
+        return_to_departure: bool,
         propulsion_config: Optional[PropulsionConfig],
         navigation_config: Optional[NavigationConfig],
         leg_candidate_cache: Dict[Tuple[str, str, str, int], Tuple[GravityAssistCandidate, ...]],
     ) -> Optional[MissionTourCandidate]:
+        mission_targets = self._mission_targets(
+            departure_body=departure_body,
+            visit_order=visit_order,
+            return_to_departure=return_to_departure,
+        )
         leg_candidates = self._plan_leg_candidates_for_visit_order(
             departure_body=departure_body,
             visit_order=visit_order,
+            mission_targets=mission_targets,
             launch_epoch=launch_epoch,
             max_assist_bodies_per_leg=max_assist_bodies_per_leg,
             allow_repeated_flybys=allow_repeated_flybys,
@@ -242,6 +253,7 @@ class MissionTourPlanner:
         return self._assemble_candidate(
             departure_body=departure_body,
             visit_order=visit_order,
+            mission_targets=mission_targets,
             launch_epoch=launch_epoch,
             leg_candidates=leg_candidates,
             propulsion_config=propulsion_config,
@@ -256,11 +268,18 @@ class MissionTourPlanner:
         launch_epoch: str,
         max_assist_bodies_per_leg: int,
         allow_repeated_flybys: bool,
+        return_to_departure: bool,
         leg_candidate_cache: Dict[Tuple[str, str, str, int], Tuple[GravityAssistEstimate, ...]],
     ) -> Optional[MissionTourEstimate]:
+        mission_targets = self._mission_targets(
+            departure_body=departure_body,
+            visit_order=visit_order,
+            return_to_departure=return_to_departure,
+        )
         leg_candidates = self._plan_estimate_leg_candidates_for_visit_order(
             departure_body=departure_body,
             visit_order=visit_order,
+            mission_targets=mission_targets,
             launch_epoch=launch_epoch,
             max_assist_bodies_per_leg=max_assist_bodies_per_leg,
             allow_repeated_flybys=allow_repeated_flybys,
@@ -280,6 +299,7 @@ class MissionTourPlanner:
         *,
         departure_body: str,
         visit_order: Tuple[str, ...],
+        mission_targets: Tuple[str, ...],
         launch_epoch: str,
         max_assist_bodies_per_leg: int,
         allow_repeated_flybys: bool,
@@ -289,10 +309,10 @@ class MissionTourPlanner:
         current_epoch = launch_epoch
         leg_candidates: List[GravityAssistEstimate] = []
 
-        for visit_body in visit_order:
+        for target_body in mission_targets:
             leg_candidate = self._select_leg_estimate_candidate(
                 departure_body=current_body,
-                target_body=visit_body,
+                target_body=target_body,
                 launch_epoch=current_epoch,
                 max_assist_bodies_per_leg=max_assist_bodies_per_leg,
                 used_bodies=self._used_bodies_for_tour(visit_order, leg_candidates) if not allow_repeated_flybys else set(),
@@ -301,7 +321,7 @@ class MissionTourPlanner:
             if leg_candidate is None:
                 return None
             leg_candidates.append(leg_candidate)
-            current_body = visit_body
+            current_body = target_body
             current_epoch = _epoch_with_offset(current_epoch, leg_candidate.total_flight_time_seconds)
 
         return tuple(leg_candidates)
@@ -311,6 +331,7 @@ class MissionTourPlanner:
         *,
         departure_body: str,
         visit_order: Tuple[str, ...],
+        mission_targets: Tuple[str, ...],
         launch_epoch: str,
         max_assist_bodies_per_leg: int,
         allow_repeated_flybys: bool,
@@ -320,10 +341,10 @@ class MissionTourPlanner:
         current_epoch = launch_epoch
         leg_candidates: List[GravityAssistCandidate] = []
 
-        for visit_body in visit_order:
+        for target_body in mission_targets:
             leg_candidate = self._select_leg_candidate(
                 departure_body=current_body,
-                target_body=visit_body,
+                target_body=target_body,
                 launch_epoch=current_epoch,
                 max_assist_bodies_per_leg=max_assist_bodies_per_leg,
                 used_bodies=self._used_bodies_for_tour(visit_order, leg_candidates) if not allow_repeated_flybys else set(),
@@ -332,10 +353,21 @@ class MissionTourPlanner:
             if leg_candidate is None:
                 return None
             leg_candidates.append(leg_candidate)
-            current_body = visit_body
+            current_body = target_body
             current_epoch = _epoch_with_offset(current_epoch, leg_candidate.total_flight_time_seconds)
 
         return tuple(leg_candidates)
+
+    def _mission_targets(
+        self,
+        *,
+        departure_body: str,
+        visit_order: Tuple[str, ...],
+        return_to_departure: bool,
+    ) -> Tuple[str, ...]:
+        if return_to_departure and visit_order:
+            return visit_order + (departure_body,)
+        return visit_order
 
     def _select_leg_candidate(
         self,
@@ -452,6 +484,7 @@ class MissionTourPlanner:
         *,
         departure_body: str,
         visit_order: Tuple[str, ...],
+        mission_targets: Tuple[str, ...],
         launch_epoch: str,
         leg_candidates: Sequence[GravityAssistCandidate],
         propulsion_config: Optional[PropulsionConfig],
@@ -484,10 +517,11 @@ class MissionTourPlanner:
             )
 
             arrival_epoch = _epoch_with_offset(launch_epoch, epoch_offset + leg_candidate.total_flight_time_seconds)
-            target_state = self.ephemeris.get_body_state(visit_order[index], arrival_epoch)
+            target_body = mission_targets[index]
+            target_state = self.ephemeris.get_body_state(target_body, arrival_epoch)
             visit_events.append(
                 VisitEvent(
-                    body_id=visit_order[index],
+                    body_id=target_body,
                     epoch=arrival_epoch,
                     position_km=tuple(target_state.position_km),
                 )
@@ -529,8 +563,8 @@ class MissionTourPlanner:
         total_days = epoch_offset / 86_400.0
         score = total_delta_v + total_days * 0.015 + len(flyby_events) * 0.5 + repeated_penalty
 
-        if visit_order and samples:
-            final_target_body = visit_order[-1]
+        if mission_targets and samples:
+            final_target_body = mission_targets[-1]
             final_arrival_epoch = _epoch_with_offset(launch_epoch, epoch_offset)
             arrival_capture_plan = self.arrival_capture_planner.plan_capture(
                 body_id=final_target_body,
@@ -572,7 +606,7 @@ class MissionTourPlanner:
 
         candidate_samples = samples
         candidate_closest_approach = {
-            "bodyId": visit_order[-1],
+            "bodyId": mission_targets[-1],
             "distanceKm": float(legs[-1].closest_approach_km),
             "epochSeconds": float(epoch_offset),
         }
@@ -602,9 +636,9 @@ class MissionTourPlanner:
             navigation_telemetry = navigation_result.navigation_telemetry
             candidate_closest_approach = compute_closest_approach(
                 candidate_samples,
-                visit_order[-1],
+                mission_targets[-1],
                 self._target_samples_for_body(
-                    body_id=visit_order[-1],
+                    body_id=mission_targets[-1],
                     launch_epoch=launch_epoch,
                     samples=candidate_samples,
                 ),
@@ -631,7 +665,7 @@ class MissionTourPlanner:
             mission_timeline=build_mission_timeline(
                 launch_epoch=launch_epoch,
                 flight_time_seconds=epoch_offset,
-                target_body=visit_order[-1],
+                target_body=mission_targets[-1],
                 samples=candidate_samples,
                 closest_approach=_materialize_closest_approach_epoch(
                     launch_epoch,

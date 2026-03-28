@@ -57,6 +57,7 @@ def launch_window(request: LaunchWindowRequest) -> dict:
         max_returned_candidates=request.maxReturnedCandidates,
         allow_assist_bodies=request.allowAssistBodies,
         allow_repeated_flybys=request.allowRepeatedFlybys,
+        return_to_departure=request.returnToDeparture,
         propulsion_config=request.propulsionConfig,
     ).to_dict()
 
@@ -72,6 +73,7 @@ def plan_tour(request: MissionTourRequest) -> dict:
         max_returned_candidates=request.maxReturnedCandidates,
         allow_assist_bodies=request.allowAssistBodies,
         allow_repeated_flybys=request.allowRepeatedFlybys,
+        return_to_departure=request.returnToDeparture,
         propulsion_config=request.propulsionConfig,
         navigation_config=request.navigationConfig,
     )

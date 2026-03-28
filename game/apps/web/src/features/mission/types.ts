@@ -125,6 +125,7 @@ export type MissionTourRequest = {
   maxReturnedCandidates?: number;
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
+  returnToDeparture?: boolean;
   propulsionConfig?: PropulsionConfig;
   navigationConfig?: NavigationConfig;
 };
@@ -141,6 +142,7 @@ export type LaunchWindowRequest = {
   maxReturnedCandidates?: number;
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
+  returnToDeparture?: boolean;
   propulsionConfig?: PropulsionConfig;
 };
 

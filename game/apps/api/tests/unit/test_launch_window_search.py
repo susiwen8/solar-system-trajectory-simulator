@@ -74,10 +74,11 @@ def test_launch_window_search_uses_lightweight_tour_estimates_for_tour_candidate
             max_returned_candidates,
             allow_assist_bodies,
             allow_repeated_flybys,
+            return_to_departure,
             propulsion_config,
         ):
             del departure_body, max_assist_bodies_per_leg, max_returned_candidates
-            del allow_assist_bodies, allow_repeated_flybys, propulsion_config
+            del allow_assist_bodies, allow_repeated_flybys, return_to_departure, propulsion_config
             sampled_epochs.append(launch_epoch)
             return [
                 type(
@@ -121,6 +122,56 @@ def test_launch_window_search_returns_ranked_tour_candidates(bundled_ephemeris) 
     assert result.candidate_launches[0].visit_order == ("venus", "jupiter", "saturn")
 
 
+def test_launch_window_search_forwards_return_to_departure_flag(bundled_ephemeris) -> None:
+    service = LaunchWindowSearchService(ephemeris=bundled_ephemeris)
+    recorded: list[bool] = []
+
+    class StubTourPlanner:
+        def estimate_tour_candidates(
+            self,
+            *,
+            departure_body,
+            required_visit_bodies,
+            launch_epoch,
+            max_assist_bodies_per_leg,
+            max_returned_candidates,
+            allow_assist_bodies,
+            allow_repeated_flybys,
+            return_to_departure,
+            propulsion_config,
+        ):
+            del departure_body, launch_epoch, max_assist_bodies_per_leg, max_returned_candidates
+            del allow_assist_bodies, allow_repeated_flybys, propulsion_config
+            recorded.append(return_to_departure)
+            return [
+                type(
+                    "Estimate",
+                    (),
+                    {
+                        "score": 8.0,
+                        "total_delta_v_km_per_s": 8.0,
+                        "total_flight_time_seconds": 240.0 * 86_400.0,
+                        "visit_order": tuple(required_visit_bodies),
+                        "full_sequence_bodies": ("earth", *tuple(required_visit_bodies), "earth"),
+                    },
+                )()
+            ]
+
+    service.tour_planner = StubTourPlanner()
+
+    result = service.search_tour_window(
+        departure_body="earth",
+        required_visit_bodies=("mars",),
+        earliest_launch_epoch="2026-01-01T00:00:00Z",
+        return_to_departure=True,
+    )
+
+    assert recorded
+    assert all(recorded)
+    assert result.candidate_launches
+    assert result.candidate_launches[0].full_sequence_bodies == ("earth", "mars", "earth")
+
+
 def test_launch_window_search_reuses_overlapping_tour_epoch_estimates(bundled_ephemeris) -> None:
     service = LaunchWindowSearchService(ephemeris=bundled_ephemeris)
     sampled_epochs: list[str] = []
@@ -139,10 +190,11 @@ def test_launch_window_search_reuses_overlapping_tour_epoch_estimates(bundled_ep
             max_returned_candidates,
             allow_assist_bodies,
             allow_repeated_flybys,
+            return_to_departure,
             propulsion_config,
         ):
             del departure_body, max_assist_bodies_per_leg, max_returned_candidates
-            del allow_assist_bodies, allow_repeated_flybys, propulsion_config
+            del allow_assist_bodies, allow_repeated_flybys, return_to_departure, propulsion_config
             sampled_epochs.append(launch_epoch)
             score = 1.0 if launch_epoch == overlapped_epoch else 10.0
             return [

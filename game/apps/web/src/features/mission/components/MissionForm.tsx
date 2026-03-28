@@ -95,13 +95,14 @@ function dateInputValueToIsoEpoch(value: string): string {
 
 export default function MissionForm({ onSubmit, language, loading, launchWindowResult = null }: MissionFormProps) {
   const [selectedBodies, setSelectedBodies] = useState<Exclude<BodyId, "earth">[]>(["mars"]);
+  const [returnToDeparture, setReturnToDeparture] = useState(false);
   const [trajectoryRequest, setTrajectoryRequest] = useState<MissionRequest>(defaultTrajectoryRequest);
   const [propulsionConfig, setPropulsionConfig] = useState<PropulsionConfig | null>(null);
   const [navigationConfig, setNavigationConfig] = useState<NavigationConfig | null>(null);
   const [launchPlanningMode, setLaunchPlanningMode] = useState<LaunchPlanningMode>("recommendedWindow");
   const [selectedWindowLaunchEpoch, setSelectedWindowLaunchEpoch] = useState("");
   const copy = t(language);
-  const isSingleDestination = selectedBodies.length <= 1;
+  const isDirectTrajectoryMission = selectedBodies.length === 1 && !returnToDeparture;
   const trajectoryMode = trajectoryRequest.initialState.launchFromBody ? "autoTransfer" : "stateVector";
 
   useEffect(() => {
@@ -250,7 +251,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
           : null,
     };
 
-    if (selectedBodies.length === 1) {
+    if (isDirectTrajectoryMission) {
       await onSubmit({
         kind: "trajectory",
         request: {
@@ -270,6 +271,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
         departureBody: "earth",
         requiredVisitBodies: selectedBodies,
         launchEpoch: trajectoryRequest.launchEpoch,
+        returnToDeparture,
         propulsionConfig: propulsionConfig ?? undefined,
         navigationConfig: navigationConfig ?? undefined,
         ...defaultPlannerOptions,
@@ -367,9 +369,19 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
                 );
               })}
             </div>
+            <label className="mission-field mission-field--checkbox">
+              <span>{copy.returnToEarth}</span>
+              <input
+                aria-label={copy.returnToEarth}
+                type="checkbox"
+                checked={returnToDeparture}
+                disabled={loading}
+                onChange={(event) => setReturnToDeparture(event.target.checked)}
+              />
+            </label>
           </div>
 
-          {isSingleDestination ? (
+          {isDirectTrajectoryMission ? (
             <>
               <div className="mission-form__grid mission-form__grid--two">
                 <label className="mission-field">
@@ -594,7 +606,7 @@ export default function MissionForm({ onSubmit, language, loading, launchWindowR
           </div>
         </div>
 
-        {isSingleDestination && trajectoryMode === "stateVector" ? (
+        {isDirectTrajectoryMission && trajectoryMode === "stateVector" ? (
           <div className="mission-form__group">
             <div className="mission-form__group-header">
               <h3>{copy.initialStateVector}</h3>
