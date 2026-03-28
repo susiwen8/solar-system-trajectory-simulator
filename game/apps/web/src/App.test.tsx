@@ -5,8 +5,13 @@ import App from "./App";
 
 const EMPTY_PREVIEW_EPOCH = "2026-01-01T00:00:00Z";
 
+beforeEach(() => {
+  window.history.replaceState({}, "", "/");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  window.history.replaceState({}, "", "/");
 });
 
 function hasExactTextContent(text: string) {
@@ -88,6 +93,45 @@ function createLaunchWindowResponse(overrides: Partial<Record<string, unknown>> 
       ...overrides,
     });
 }
+
+function renderAtPath(pathname: string) {
+  window.history.pushState({}, "", pathname);
+  return render(<App />);
+}
+
+it("renders the simulator page at /", () => {
+  renderAtPath("/");
+
+  expect(screen.getByRole("heading", { name: "太阳系轨迹模拟器" })).toBeInTheDocument();
+});
+
+it("renders the recovery page at /spacex-recovery with the explainer controls and scene", () => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+
+  renderAtPath("/spacex-recovery");
+
+  expect(screen.getByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
+  expect(screen.getByRole("slider", { name: "回放步进" })).toBeInTheDocument();
+  expect(screen.getByTestId("spacex-recovery-scene")).toBeInTheDocument();
+  expect(screen.getByRole("main")).not.toHaveAttribute("data-scroll-mode");
+});
+
+it("swaps pages and responds to popstate from the nav", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+
+  renderAtPath("/");
+
+  await user.click(screen.getByRole("link", { name: "回收任务" }));
+
+  expect(window.location.pathname).toBe("/spacex-recovery");
+  expect(await screen.findByRole("heading", { name: "SpaceX 回收任务" })).toBeInTheDocument();
+
+  window.history.pushState({}, "", "/");
+  fireEvent(window, new PopStateEvent("popstate"));
+
+  expect(await screen.findByRole("heading", { name: "太阳系轨迹模拟器" })).toBeInTheDocument();
+});
 
 it("renders the simulator heading", () => {
   render(<App />);
