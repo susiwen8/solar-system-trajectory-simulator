@@ -73,10 +73,15 @@ function createHarness() {
   };
 
   global.window = {
+    location: {
+      search: ''
+    },
     addEventListener(type, handler) {
       windowListeners[type] = handler;
     }
   };
+
+  global.location = global.window.location;
 
   return {
     selectors,
@@ -136,4 +141,42 @@ test('solver-main ignores board hotkeys while the textarea is focused', async ()
   });
 
   assert.doesNotMatch(selectors['#solver-board'].innerHTML, />5</);
+});
+
+test('solver-main preloads a valid puzzle from the URL without auto-solving it', async () => {
+  const { selectors } = createHarness();
+  const puzzle =
+    '530070000' +
+    '600195000' +
+    '098000060' +
+    '800060003' +
+    '400803001' +
+    '700020006' +
+    '060000280' +
+    '000419005' +
+    '000080079';
+
+  global.window.location.search = `?puzzle=${puzzle}`;
+
+  await import(`../src/solver-main.js?test=${Date.now()}-query-preload`);
+
+  assert.equal(selectors['#solver-input'].value, puzzle);
+  assert.match(selectors['#solver-board'].innerHTML, />5</);
+  assert.equal(selectors['#solver-step-count'].textContent, '0');
+  assert.match(selectors['#solver-result-board'].innerHTML, /求解后会在这里显示完整答案/);
+  assert.equal(selectors['#solver-steps'].innerHTML, '');
+});
+
+test('solver-main falls back gracefully when the URL puzzle is invalid', async () => {
+  const { selectors } = createHarness();
+  global.window.location.search = '?puzzle=123';
+
+  await import(`../src/solver-main.js?test=${Date.now()}-query-invalid`);
+
+  assert.equal(selectors['#solver-input'].value, '');
+  assert.equal(
+    selectors['#solver-message'].textContent,
+    '带入题目失败，请重新导入或手动填写。'
+  );
+  assert.equal(selectors['#solver-step-count'].textContent, '0');
 });

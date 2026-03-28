@@ -36,6 +36,7 @@ class FakeElement {
     this.dataset = dataset;
     this.innerHTML = '';
     this.textContent = '';
+    this.href = '';
     this.listeners = {};
     this.classList = new FakeClassList();
   }
@@ -100,6 +101,7 @@ function createHarness(options = {}) {
   selectors['#difficulty-label'] = new FakeElement();
   selectors['#status-pill'] = new FakeElement();
   selectors['#message'] = new FakeElement();
+  selectors['#solver-link'] = new FakeElement();
   selectors['#notes-toggle'] = new FakeElement();
   selectors['#prefill-toggle'] = new FakeElement();
   selectors['#locate-prefill'] = new FakeElement();
@@ -255,4 +257,26 @@ test('main.js renders tentative fills and traced origin markers', async () => {
     getButtonClassNames(selectors['#board'].innerHTML, '第 1 行第 1 列'),
     /\btrace-origin\b/
   );
+});
+
+test('main.js points the solver link at the original puzzle instead of the live board state', async () => {
+  const puzzle = Array.from({ length: 9 }, () => Array(9).fill(0));
+  const board = Array.from({ length: 9 }, () => Array(9).fill(0));
+  puzzle[0][0] = 5;
+  puzzle[0][1] = 3;
+  board[0][0] = 5;
+  board[0][1] = 3;
+  board[0][2] = 4;
+
+  const { selectors } = createHarness({
+    session: createSessionSnapshot({
+      puzzle,
+      board
+    })
+  });
+
+  await import(`../src/main.js?test=${Date.now()}-solver-link`);
+
+  assert.match(selectors['#solver-link'].href, /solver\.html\?puzzle=53\.+/);
+  assert.doesNotMatch(selectors['#solver-link'].href, /534/);
 });

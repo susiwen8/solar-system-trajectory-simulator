@@ -35,6 +35,8 @@ http://localhost:4173/index.html
 http://localhost:4173/solver.html
 ```
 
+你也可以在游戏主页点击“把这题带去解题器”，把当前局的原题直接带到 solver 页面继续分析。
+
 如果你只是想看代码逻辑，入口文件在：
 
 - `index.html`

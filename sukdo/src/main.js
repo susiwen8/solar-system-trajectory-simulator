@@ -31,6 +31,7 @@ const elements = {
   difficultyLabel: document.querySelector('#difficulty-label'),
   statusPill: document.querySelector('#status-pill'),
   message: document.querySelector('#message'),
+  solverLink: document.querySelector('#solver-link'),
   difficultyButtons: document.querySelector('#difficulty-buttons'),
   notesToggle: document.querySelector('#notes-toggle'),
   prefillToggle: document.querySelector('#prefill-toggle'),
@@ -94,6 +95,10 @@ function buildNotesMarkup(notes) {
   }
 
   return cells.join('');
+}
+
+function serializePuzzleForSolver(board) {
+  return board.flat().map((value) => (value === 0 ? '.' : String(value))).join('');
 }
 
 function isPeerCell(first, second) {
@@ -240,6 +245,11 @@ function renderMeta() {
   elements.statusPill.classList.toggle('completed', state.completed);
   elements.notesToggle.classList.toggle('primary', state.notesMode);
   elements.prefillToggle.classList.toggle('primary', state.prefillMode);
+
+  if (elements.solverLink) {
+    const puzzle = serializePuzzleForSolver(state.puzzle);
+    elements.solverLink.href = `./solver.html?puzzle=${encodeURIComponent(puzzle)}`;
+  }
 
   for (const button of elements.difficultyButtons.querySelectorAll('[data-difficulty]')) {
     button.classList.toggle('active', button.dataset.difficulty === state.difficulty);

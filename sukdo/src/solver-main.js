@@ -21,6 +21,33 @@ function serializeBoard(board) {
   return board.flat().map((value) => (value === 0 ? '.' : String(value))).join('');
 }
 
+function loadBoardFromQuery() {
+  const params = new URLSearchParams(window.location?.search ?? '');
+  const puzzle = params.get('puzzle');
+
+  if (!puzzle) {
+    return {
+      board: null,
+      input: '',
+      error: ''
+    };
+  }
+
+  try {
+    return {
+      board: parseBoardInput(puzzle),
+      input: puzzle,
+      error: ''
+    };
+  } catch {
+    return {
+      board: null,
+      input: '',
+      error: '带入题目失败，请重新导入或手动填写。'
+    };
+  }
+}
+
 const elements = {
   board: document.querySelector('#solver-board'),
   input: document.querySelector('#solver-input'),
@@ -35,15 +62,16 @@ const elements = {
 };
 
 if (Object.values(elements).every(Boolean)) {
+  const preload = loadBoardFromQuery();
   const state = {
-    board: createEmptyBoard(),
+    board: preload.board ? cloneBoard(preload.board) : createEmptyBoard(),
     selectedCell: { row: 0, col: 0 },
     validation: {
       valid: true,
       conflicts: []
     },
     analysis: null,
-    parseError: ''
+    parseError: preload.error
   };
 
   function updateValidation() {
@@ -259,5 +287,8 @@ if (Object.values(elements).every(Boolean)) {
   window.addEventListener('keydown', handleKeydown);
 
   updateValidation();
+  if (preload.input) {
+    elements.input.value = preload.input;
+  }
   render();
 }
