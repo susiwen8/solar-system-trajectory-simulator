@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sukdo Sudoku</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-glow page-glow-left"></div>
+    <div class="page-glow page-glow-right"></div>
+
+    <main class="app-shell">
+      <section class="hero-card">
+        <p class="eyebrow">SUKDO</p>
+        <div class="hero-copy">
+          <div>
+            <h1>把数字摆到刚刚好的位置</h1>
+            <p class="hero-text">
+              一个带笔记、提示、计时、难度切换和进度保存的本地数独游戏。
+            </p>
+            <div class="hero-actions">
+              <a id="solver-link" class="hero-link" href="./solver.html">把这题带去解题器</a>
+            </div>
+          </div>
+          <div class="hero-stats">
+            <div class="stat-card">
+              <span class="stat-label">计时</span>
+              <strong id="timer">00:00</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">最佳</span>
+              <strong id="best-time">--:--</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">提示</span>
+              <strong id="hint-count">0</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="game-layout">
+        <section class="board-panel">
+          <div class="panel-topline">
+            <div>
+              <p class="panel-label">当前难度</p>
+              <strong id="difficulty-label">中等</strong>
+            </div>
+            <div id="status-pill" class="status-pill">继续挑战</div>
+          </div>
+
+          <div class="board-frame">
+            <div id="board" class="board" aria-label="Sudoku board"></div>
+          </div>
+
+          <div class="keypad-card">
+            <div id="keypad" class="keypad" aria-label="Sudoku keypad"></div>
+          </div>
+        </section>
+
+        <aside class="side-panel">
+          <section class="panel-card">
+            <p class="panel-title">新局</p>
+            <div class="difficulty-group" id="difficulty-buttons">
+              <button class="difficulty-button" data-difficulty="easy">简单</button>
+              <button class="difficulty-button" data-difficulty="medium">中等</button>
+              <button class="difficulty-button" data-difficulty="hard">困难</button>
+            </div>
+          </section>
+
+          <section class="panel-card">
+            <p class="panel-title">操作</p>
+            <div class="action-grid">
+              <button id="notes-toggle" class="action-button">笔记模式</button>
+              <button id="prefill-toggle" class="action-button">试填模式</button>
+              <button id="locate-prefill" class="action-button">定位试错</button>
+              <button id="hint-button" class="action-button">提示</button>
+              <button id="clear-button" class="action-button">清空</button>
+              <button id="reset-button" class="action-button">重置本局</button>
+            </div>
+          </section>
+
+          <section class="panel-card panel-card-accent">
+            <p class="panel-title">快捷键</p>
+            <ul class="shortcut-list">
+              <li><span>1-9</span><span>填入数字</span></li>
+              <li><span>N</span><span>切换笔记</span></li>
+              <li><span>G</span><span>切换试填</span></li>
+              <li><span>L</span><span>定位试错</span></li>
+              <li><span>H</span><span>使用提示</span></li>
+              <li><span>Delete</span><span>清空当前格</span></li>
+              <li><span>方向键</span><span>移动选中</span></li>
+            </ul>
+          </section>
+
+          <section class="panel-card">
+            <p class="panel-title">状态</p>
+            <p id="message" class="message">
+              选择一个空格，然后用键盘或下方数字盘开始解题。
+            </p>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
