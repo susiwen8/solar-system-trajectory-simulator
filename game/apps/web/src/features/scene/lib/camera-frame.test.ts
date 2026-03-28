@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ProbeCameraView } from "./camera";
-import { buildProbeCameraFrame } from "./camera-frame";
+import { buildProbeCameraFrame, type ScenePerspective } from "./camera-frame";
 import { scaleDistanceKm } from "./scale";
 
 const samplePositionKm: [number, number, number] = [149_597_870.7, 0, 0];
@@ -39,12 +39,37 @@ function view(mode: ProbeCameraView["mode"]): ProbeCameraView {
   };
 }
 
+function frameFor(
+  perspective: ScenePerspective,
+  mode: ProbeCameraView["mode"] = "cruise-follow",
+) {
+  return buildProbeCameraFrame(samplePositionKm, view(mode), 1.15, undefined, perspective);
+}
+
 describe("buildProbeCameraFrame", () => {
+  it("keeps the probe centered beneath a top-down follow camera", () => {
+    const frame = frameFor("topdown-follow");
+    const probeX = scaleDistanceKm(samplePositionKm[0]) * 1.8;
+
+    expect(frame.position[0]).toBeCloseTo(probeX, 5);
+    expect(frame.lookAt[0]).toBeCloseTo(probeX, 5);
+    expect(frame.position[1]).toBeGreaterThan(frame.lookAt[1]);
+    expect(frame.position[2]).toBeCloseTo(frame.lookAt[2], 5);
+  });
+
+  it("places the first-person camera almost on the probe and looks far ahead", () => {
+    const frame = frameFor("first-person");
+    const probeX = scaleDistanceKm(samplePositionKm[0]) * 1.8;
+
+    expect(frame.position[0]).toBeCloseTo(probeX, 1);
+    expect(frame.lookAt[2]).toBeGreaterThan(frame.position[2] + 12);
+    expect(frame.fovDeg).toBeGreaterThan(60);
+  });
+
   it("anchors far-field probe framing to the linear heliocentric scene scale", () => {
-    const frame = buildProbeCameraFrame(samplePositionKm, view("cruise-follow"), 1.15);
+    const frame = frameFor("topdown-follow");
 
     expect(frame.lookAt[0]).toBeCloseTo(scaleDistanceKm(samplePositionKm[0]) * 1.8, 5);
-    expect(frame.lookAt[2]).toBeCloseTo(7.2, 5);
   });
 
   it("keeps cruise framing close to the probe after realism retuning", () => {

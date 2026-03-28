@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from app.core.ephemeris.base import BodyState
 from app.core.dynamics.acceleration import point_mass_acceleration
 from app.core.dynamics.events import compute_closest_approach
 from app.core.dynamics.flyby import evaluate_unpowered_flyby
@@ -79,6 +80,16 @@ class GravityAssistCandidate:
 
 
 @dataclass(frozen=True)
+class GravityAssistEstimate:
+    sequence_bodies: Tuple[str, ...]
+    score: float
+    delta_v_km_per_s: float
+    total_flight_time_seconds: float
+    warnings: Tuple[str, ...]
+    flyby_events: Tuple[CandidateFlybyEvent, ...]
+
+
+@dataclass(frozen=True)
 class _LegPlan:
     departure_body: str
     arrival_body: str
@@ -105,6 +116,8 @@ class GravityAssistSearchService:
         self.ephemeris = ephemeris
         self.transfer_planner = TransferPlanner(ephemeris)
         self.solar_mu = self.transfer_planner.solar_mu
+        self._body_state_cache: Dict[Tuple[str, str], BodyState] = {}
+        self._leg_plan_cache: Dict[Tuple[str, str, str, float], Optional[_LegPlan]] = {}
 
     def search(
         self,
@@ -116,6 +129,63 @@ class GravityAssistSearchService:
         candidate_limit: int = 5,
         sequence_budget: int = 36,
     ) -> List[GravityAssistCandidate]:
+        top_candidates = self._search_evaluated_candidates(
+            departure_body=departure_body,
+            target_body=target_body,
+            launch_epoch=launch_epoch,
+            max_flybys=max_flybys,
+            candidate_limit=candidate_limit,
+            sequence_budget=sequence_budget,
+        )
+        return [
+            self._build_candidate_output(
+                departure_body=departure_body,
+                target_body=target_body,
+                candidate=candidate,
+            )
+            for candidate in top_candidates
+        ]
+
+    def search_estimates(
+        self,
+        *,
+        departure_body: str,
+        target_body: str,
+        launch_epoch: str,
+        max_flybys: int = 3,
+        candidate_limit: int = 5,
+        sequence_budget: int = 36,
+    ) -> List[GravityAssistEstimate]:
+        top_candidates = self._search_evaluated_candidates(
+            departure_body=departure_body,
+            target_body=target_body,
+            launch_epoch=launch_epoch,
+            max_flybys=max_flybys,
+            candidate_limit=candidate_limit,
+            sequence_budget=sequence_budget,
+        )
+        return [
+            GravityAssistEstimate(
+                sequence_bodies=candidate.sequence_bodies,
+                score=round(candidate.score, 3),
+                delta_v_km_per_s=round(candidate.delta_v_km_per_s, 3),
+                total_flight_time_seconds=candidate.total_flight_time_seconds,
+                warnings=candidate.warnings,
+                flyby_events=candidate.flyby_events,
+            )
+            for candidate in top_candidates
+        ]
+
+    def _search_evaluated_candidates(
+        self,
+        *,
+        departure_body: str,
+        target_body: str,
+        launch_epoch: str,
+        max_flybys: int,
+        candidate_limit: int,
+        sequence_budget: int,
+    ) -> List[_EvaluatedCandidate]:
         raw_sequences = self._generate_sequences(
             departure_body=departure_body,
             target_body=target_body,
@@ -133,15 +203,7 @@ class GravityAssistSearchService:
             if candidate is not None:
                 evaluated.append(candidate)
 
-        top_candidates = sorted(evaluated, key=lambda candidate: candidate.score)[:candidate_limit]
-        return [
-            self._build_candidate_output(
-                departure_body=departure_body,
-                target_body=target_body,
-                candidate=candidate,
-            )
-            for candidate in top_candidates
-        ]
+        return sorted(evaluated, key=lambda candidate: candidate.score)[:candidate_limit]
 
     def _generate_sequences(
         self,
@@ -270,7 +332,7 @@ class GravityAssistSearchService:
             for index, assist_body in enumerate(assist_bodies):
                 arrival_leg = leg_plans[index]
                 departure_leg = leg_plans[index + 1]
-                assist_state = self.ephemeris.get_body_state(assist_body, arrival_leg.arrival_epoch)
+                assist_state = self._get_body_state(assist_body, arrival_leg.arrival_epoch)
                 flyby = evaluate_unpowered_flyby(
                     assist_body,
                     arrival_leg.arrival_velocity_km_per_s,
@@ -299,8 +361,8 @@ class GravityAssistSearchService:
             if not feasible:
                 continue
 
-            departure_state = self.ephemeris.get_body_state(departure_body, launch_epoch)
-            target_arrival_state = self.ephemeris.get_body_state(target_body, leg_plans[-1].arrival_epoch)
+            departure_state = self._get_body_state(departure_body, launch_epoch)
+            target_arrival_state = self._get_body_state(target_body, leg_plans[-1].arrival_epoch)
             departure_delta_v = float(
                 np.linalg.norm(leg_plans[0].departure_velocity_km_per_s - np.array(departure_state.velocity_km_per_s, dtype=float))
             )
@@ -344,37 +406,16 @@ class GravityAssistSearchService:
         leg_plans: List[_LegPlan] = []
 
         for departure_body, arrival_body in zip(bodies[:-1], bodies[1:]):
-            departure_state = self.ephemeris.get_body_state(departure_body, current_epoch)
-            nominal_duration_seconds = self._nominal_leg_duration_seconds(
-                departure_state.position_km,
+            leg_plan = self._get_leg_plan(
+                departure_body=departure_body,
                 arrival_body=arrival_body,
-                epoch=current_epoch,
+                departure_epoch=current_epoch,
+                global_scale=global_scale,
             )
-            duration_seconds = max(35.0 * 86_400.0, nominal_duration_seconds * global_scale)
-            arrival_epoch = _epoch_with_offset(current_epoch, duration_seconds)
-            arrival_state = self.ephemeris.get_body_state(arrival_body, arrival_epoch)
-            try:
-                solution = solve_lambert_transfer(
-                    departure_position_km=np.array(departure_state.position_km, dtype=float),
-                    arrival_position_km=np.array(arrival_state.position_km, dtype=float),
-                    time_of_flight_seconds=duration_seconds,
-                    mu_km3_per_s2=self.solar_mu,
-                )
-            except ValueError:
+            if leg_plan is None:
                 return None
-
-            leg_plans.append(
-                _LegPlan(
-                    departure_body=departure_body,
-                    arrival_body=arrival_body,
-                    departure_epoch=current_epoch,
-                    arrival_epoch=arrival_epoch,
-                    duration_seconds=duration_seconds,
-                    departure_velocity_km_per_s=solution.departure_velocity_km_per_s,
-                    arrival_velocity_km_per_s=solution.arrival_velocity_km_per_s,
-                )
-            )
-            current_epoch = arrival_epoch
+            leg_plans.append(leg_plan)
+            current_epoch = leg_plan.arrival_epoch
 
         return tuple(leg_plans)
 
@@ -385,7 +426,7 @@ class GravityAssistSearchService:
         arrival_body: str,
         epoch: str,
     ) -> float:
-        arrival_state = self.ephemeris.get_body_state(arrival_body, epoch)
+        arrival_state = self._get_body_state(arrival_body, epoch)
         r1 = float(np.linalg.norm(np.array(departure_position_km, dtype=float)))
         r2 = float(np.linalg.norm(np.array(arrival_state.position_km, dtype=float)))
         transfer_axis = max((r1 + r2) / 2.0, 1.0)
@@ -495,7 +536,7 @@ class GravityAssistSearchService:
             {
                 "epochSeconds": sample["epochSeconds"],
                 "positionKm": list(
-                    self.ephemeris.get_body_state(
+                    self._get_body_state(
                         target_body,
                         _epoch_with_offset(launch_epoch, float(sample["epochSeconds"])),
                     ).position_km
@@ -503,6 +544,60 @@ class GravityAssistSearchService:
             }
             for sample in samples
         ]
+
+    def _get_body_state(self, body_id: str, epoch: str) -> BodyState:
+        cache_key = (body_id, epoch)
+        cached = self._body_state_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        state = self.ephemeris.get_body_state(body_id, epoch)
+        self._body_state_cache[cache_key] = state
+        return state
+
+    def _get_leg_plan(
+        self,
+        *,
+        departure_body: str,
+        arrival_body: str,
+        departure_epoch: str,
+        global_scale: float,
+    ) -> Optional[_LegPlan]:
+        cache_key = (departure_body, arrival_body, departure_epoch, global_scale)
+        if cache_key in self._leg_plan_cache:
+            return self._leg_plan_cache[cache_key]
+
+        departure_state = self._get_body_state(departure_body, departure_epoch)
+        nominal_duration_seconds = self._nominal_leg_duration_seconds(
+            departure_state.position_km,
+            arrival_body=arrival_body,
+            epoch=departure_epoch,
+        )
+        duration_seconds = max(35.0 * 86_400.0, nominal_duration_seconds * global_scale)
+        arrival_epoch = _epoch_with_offset(departure_epoch, duration_seconds)
+        arrival_state = self._get_body_state(arrival_body, arrival_epoch)
+
+        try:
+            solution = solve_lambert_transfer(
+                departure_position_km=np.array(departure_state.position_km, dtype=float),
+                arrival_position_km=np.array(arrival_state.position_km, dtype=float),
+                time_of_flight_seconds=duration_seconds,
+                mu_km3_per_s2=self.solar_mu,
+            )
+        except ValueError:
+            self._leg_plan_cache[cache_key] = None
+            return None
+
+        leg_plan = _LegPlan(
+            departure_body=departure_body,
+            arrival_body=arrival_body,
+            departure_epoch=departure_epoch,
+            arrival_epoch=arrival_epoch,
+            duration_seconds=duration_seconds,
+            departure_velocity_km_per_s=solution.departure_velocity_km_per_s,
+            arrival_velocity_km_per_s=solution.arrival_velocity_km_per_s,
+        )
+        self._leg_plan_cache[cache_key] = leg_plan
+        return leg_plan
 
 
 def _epoch_with_offset(base_epoch: str, offset_seconds: float) -> str:

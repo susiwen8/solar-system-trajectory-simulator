@@ -80,17 +80,20 @@ class LaunchWindowSearchService:
         horizon_days = self._search_horizon_days(mission_type="trajectory", target_body=target_body)
         coarse_step_days = 180 if target_body in INNER_PLANETS else 270
         fine_step_days = 30 if target_body in INNER_PLANETS else 45
+        candidate_cache: dict[str, LaunchWindowCandidate] = {}
 
         coarse_candidates = self._evaluate_trajectory_candidates(
             departure_body=departure_body,
             target_body=target_body,
             candidate_epochs=self._candidate_epochs(search_start, horizon_days, coarse_step_days),
+            candidate_cache=candidate_cache,
         )
         best_epochs = self._best_seed_epochs(coarse_candidates)
         refined_candidates = self._evaluate_trajectory_candidates(
             departure_body=departure_body,
             target_body=target_body,
             candidate_epochs=self._refined_epochs(best_epochs, fine_step_days),
+            candidate_cache=candidate_cache,
         )
         all_candidates = self._merge_candidates(coarse_candidates, refined_candidates)
         best = min(all_candidates, key=lambda candidate: candidate.score)
@@ -113,12 +116,14 @@ class LaunchWindowSearchService:
         max_returned_candidates: int = 5,
         allow_assist_bodies: bool = True,
         allow_repeated_flybys: bool = True,
+        return_to_departure: bool = False,
         propulsion_config: Optional[PropulsionConfig] = None,
     ) -> LaunchWindowResult:
         search_start = earliest_launch_epoch or DEFAULT_EARLIEST_LAUNCH_EPOCH
         horizon_days = self._search_horizon_days(mission_type="tour", target_body=None)
         coarse_step_days = 540
         fine_step_days = 90
+        candidate_cache: dict[str, LaunchWindowCandidate] = {}
 
         coarse_candidates = self._evaluate_tour_candidates(
             departure_body=departure_body,
@@ -128,7 +133,9 @@ class LaunchWindowSearchService:
             max_returned_candidates=max_returned_candidates,
             allow_assist_bodies=allow_assist_bodies,
             allow_repeated_flybys=allow_repeated_flybys,
+            return_to_departure=return_to_departure,
             propulsion_config=propulsion_config,
+            candidate_cache=candidate_cache,
         )
         best_epochs = self._best_seed_epochs(coarse_candidates)
         refined_candidates = self._evaluate_tour_candidates(
@@ -139,7 +146,9 @@ class LaunchWindowSearchService:
             max_returned_candidates=max_returned_candidates,
             allow_assist_bodies=allow_assist_bodies,
             allow_repeated_flybys=allow_repeated_flybys,
+            return_to_departure=return_to_departure,
             propulsion_config=propulsion_config,
+            candidate_cache=candidate_cache,
         )
         all_candidates = self._merge_candidates(coarse_candidates, refined_candidates)
         best = min(all_candidates, key=lambda candidate: candidate.score)
@@ -158,11 +167,15 @@ class LaunchWindowSearchService:
         departure_body: str,
         target_body: str,
         candidate_epochs: Iterable[str],
+        candidate_cache: Optional[dict[str, LaunchWindowCandidate]] = None,
     ) -> Tuple[LaunchWindowCandidate, ...]:
         candidates = []
         for epoch in candidate_epochs:
+            if candidate_cache is not None and epoch in candidate_cache:
+                candidates.append(candidate_cache[epoch])
+                continue
             try:
-                plan = self.transfer_planner.plan_auto_transfer(
+                estimate = self.transfer_planner.estimate_window_candidate(
                     departure_body=departure_body,
                     target_body=target_body,
                     launch_epoch=epoch,
@@ -170,18 +183,25 @@ class LaunchWindowSearchService:
             except Exception:
                 continue
 
-            flight_days = plan.duration_seconds / 86_400.0
-            miss_distance_penalty = plan.miss_distance_km / 1_000_000.0 * 0.05
-            score = plan.delta_v_km_per_s + flight_days * 0.01 + miss_distance_penalty
+            duration_seconds = (
+                estimate["duration_seconds"] if isinstance(estimate, dict) else estimate.duration_seconds
+            )
+            delta_v_km_per_s = (
+                estimate["delta_v_km_per_s"] if isinstance(estimate, dict) else estimate.delta_v_km_per_s
+            )
+            flight_days = duration_seconds / 86_400.0
+            score = delta_v_km_per_s + flight_days * 0.01
             candidates.append(
                 LaunchWindowCandidate(
                     launch_epoch=epoch,
                     score=round(score, 6),
-                    delta_v_km_per_s=round(plan.delta_v_km_per_s, 6),
-                    flight_time_seconds=round(plan.duration_seconds, 6),
+                    delta_v_km_per_s=round(delta_v_km_per_s, 6),
+                    flight_time_seconds=round(duration_seconds, 6),
                     target_body=target_body,
                 )
             )
+            if candidate_cache is not None:
+                candidate_cache[epoch] = candidates[-1]
         return tuple(sorted(candidates, key=lambda candidate: candidate.score))
 
     def _evaluate_tour_candidates(
@@ -194,12 +214,17 @@ class LaunchWindowSearchService:
         max_returned_candidates: int,
         allow_assist_bodies: bool,
         allow_repeated_flybys: bool,
+        return_to_departure: bool,
         propulsion_config: Optional[PropulsionConfig],
+        candidate_cache: Optional[dict[str, LaunchWindowCandidate]] = None,
     ) -> Tuple[LaunchWindowCandidate, ...]:
         candidates = []
         for epoch in candidate_epochs:
+            if candidate_cache is not None and epoch in candidate_cache:
+                candidates.append(candidate_cache[epoch])
+                continue
             try:
-                tour_candidates = self.tour_planner.plan_tour(
+                tour_candidates = self.tour_planner.estimate_tour_candidates(
                     departure_body=departure_body,
                     required_visit_bodies=tuple(required_visit_bodies),
                     launch_epoch=epoch,
@@ -207,6 +232,7 @@ class LaunchWindowSearchService:
                     max_returned_candidates=max_returned_candidates,
                     allow_assist_bodies=allow_assist_bodies,
                     allow_repeated_flybys=allow_repeated_flybys,
+                    return_to_departure=return_to_departure,
                     propulsion_config=propulsion_config,
                 )
             except Exception:
@@ -215,16 +241,17 @@ class LaunchWindowSearchService:
             best = tour_candidates[0] if tour_candidates else None
             if best is None:
                 continue
-            candidates.append(
-                LaunchWindowCandidate(
-                    launch_epoch=epoch,
-                    score=round(best.score, 6),
-                    delta_v_km_per_s=round(best.total_delta_v_km_per_s, 6),
-                    flight_time_seconds=round(best.total_flight_time_seconds, 6),
-                    visit_order=tuple(best.visit_order),
-                    full_sequence_bodies=tuple(best.full_sequence_bodies),
-                )
+            candidate = LaunchWindowCandidate(
+                launch_epoch=epoch,
+                score=round(best.score, 6),
+                delta_v_km_per_s=round(best.total_delta_v_km_per_s, 6),
+                flight_time_seconds=round(best.total_flight_time_seconds, 6),
+                visit_order=tuple(best.visit_order),
+                full_sequence_bodies=tuple(best.full_sequence_bodies),
             )
+            candidates.append(candidate)
+            if candidate_cache is not None:
+                candidate_cache[epoch] = candidate
         return tuple(sorted(candidates, key=lambda candidate: candidate.score))
 
     def _build_result(

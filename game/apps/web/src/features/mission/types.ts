@@ -79,6 +79,27 @@ export type MissionSegment = {
   metadata?: MissionSegmentMetadata | null;
 };
 
+export type InjectionDispersionConfig = {
+  positionSigmaKm: number;
+  velocitySigmaKmPerS: number;
+};
+
+export type CorrectionPolicy = {
+  maxTcmCount: number;
+  predictedMissThresholdKm: number;
+  positionDeviationThresholdKm: number;
+  velocityDeviationThresholdKmPerS: number;
+  checkpointStepSeconds: number;
+  maxCorrectionDeltaVKmPerS: number;
+};
+
+export type NavigationConfig = {
+  enabled: boolean;
+  randomSeed?: number | null;
+  injectionDispersion: InjectionDispersionConfig;
+  correctionPolicy: CorrectionPolicy;
+};
+
 export type MissionRequest = {
   departureBody: "earth";
   targetBody: Exclude<BodyId, "earth"> | "earth";
@@ -93,6 +114,7 @@ export type MissionRequest = {
   durationSeconds?: number;
   outputStepSeconds?: number;
   propulsionConfig?: PropulsionConfig;
+  navigationConfig?: NavigationConfig;
 };
 
 export type MissionTourRequest = {
@@ -103,7 +125,9 @@ export type MissionTourRequest = {
   maxReturnedCandidates?: number;
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
+  returnToDeparture?: boolean;
   propulsionConfig?: PropulsionConfig;
+  navigationConfig?: NavigationConfig;
 };
 
 export type LaunchPlanningMode = "recommendedWindow" | "windowSelect" | "manual";
@@ -118,6 +142,7 @@ export type LaunchWindowRequest = {
   maxReturnedCandidates?: number;
   allowAssistBodies?: boolean;
   allowRepeatedFlybys?: boolean;
+  returnToDeparture?: boolean;
   propulsionConfig?: PropulsionConfig;
 };
 
@@ -193,6 +218,33 @@ export type ManeuverEvent = {
   massAfterKg: number;
 };
 
+export type NavigationEvent = {
+  type: "dispersionInjected" | "tcmTriggered" | "tcmExecuted";
+  epoch: string;
+  reason?: "predictedMiss" | "stateDeviation" | "both";
+  predictedMissBeforeKm?: number | null;
+  predictedMissAfterKm?: number | null;
+  positionDeviationBeforeKm?: number | null;
+  positionDeviationAfterKm?: number | null;
+  velocityDeviationBeforeKmPerS?: number | null;
+  velocityDeviationAfterKmPerS?: number | null;
+  deltaVKmPerS?: number | null;
+  propellantUsedKg?: number | null;
+};
+
+export type NavigationTelemetry = {
+  enabled: boolean;
+  nominalSamples: TrajectorySample[];
+  dispersedSamples: TrajectorySample[];
+  navigationEvents: NavigationEvent[];
+  tcmCount: number;
+  cumulativeCorrectionDeltaVKmPerS: number;
+  maxPredictedMissKm: number;
+  maxPositionDeviationKm: number;
+  maxVelocityDeviationKmPerS: number;
+  finalPredictedMissKm?: number | null;
+};
+
 export type MissionTimelineEvent = {
   id: string;
   type: string;
@@ -248,6 +300,7 @@ export type MissionCandidate = {
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;
   propulsionConfig?: PropulsionConfig | null;
+  navigationTelemetry?: NavigationTelemetry | null;
   missionTimeline?: MissionTimeline | null;
 };
 
@@ -272,6 +325,7 @@ export type TrajectoryResult = {
   finalMassKg?: number | null;
   totalPropellantUsedKg?: number | null;
   propulsionConfig?: PropulsionConfig | null;
+  navigationTelemetry?: NavigationTelemetry | null;
   missionTimeline?: MissionTimeline | null;
 };
 

@@ -9,10 +9,12 @@ import {
 import * as THREE from "three";
 
 import { localizeMissionSegment, planetLabel, t, type Language } from "../../../lib/i18n";
+import { formatRelativeDurationSeconds } from "../../../lib/duration";
 import type { BodyState, ManeuverEvent, MissionSegment, TrajectoryResult } from "../../mission/types";
 import TrajectoryInsetMap from "./TrajectoryInsetMap";
 import { computeProbeCameraView, type ProbeCameraView } from "../lib/camera";
 import { buildProbeCameraFrame } from "../lib/camera-frame";
+import { buildNavigationVisuals, type NavigationVisuals } from "../lib/navigation-visuals";
 import {
   type CameraMotionState,
   type ProbeMotionState,
@@ -34,7 +36,11 @@ import {
 } from "../lib/focus-visuals";
 import { areBodyStatesClose, interpolateBodyStates } from "../lib/body-motion";
 import { buildInsetMapModel } from "../lib/inset-map";
-import { getMissionTimelineSnapshot } from "../lib/mission-timeline";
+import {
+  buildMissionTimelinePhaseMarkers,
+  getMissionTimelineSnapshot,
+  type MissionTimelinePhaseMarker,
+} from "../lib/mission-timeline";
 import { resolveProbeAttitudeDirection } from "../lib/probe-attitude";
 import {
   PROBE_EFFECTS_SCALE,
@@ -54,7 +60,16 @@ import { resolveProbeThrustState } from "../lib/probe-thrust";
 import {
   buildArrivalCaptureModel,
   buildDisplayCapturePathPoints,
+  estimateArrivalCaptureOrbitDurationSeconds,
+  sampleArrivalCaptureOrbit,
 } from "../lib/arrival-capture";
+import {
+  buildStableEncounterAdjustedSamples,
+  enforceMinimumEncounterClearance,
+} from "../lib/encounter-visual";
+import { shouldUseEncounterDisplayAdjustment } from "../lib/scene-encounter";
+import { resolveBodyFocusVisual } from "../lib/scene-focus";
+import { resolveNextScenePerspective, type ScenePerspective } from "../lib/scene-perspective";
 
 type SolarSystemSceneProps = {
   result: TrajectoryResult;
@@ -92,12 +107,15 @@ type SceneRuntime = {
   targetMotion: CameraMotionState | null;
   targetProbeMotion: ProbeMotionState | null;
   setProbeTarget: (motion: ProbeMotionState) => void;
+  hitTestProbe: (clientX: number, clientY: number) => boolean;
   setView: (
     samplePositionKm: [number, number, number],
     view: ProbeCameraView,
     zoom: number,
     orbitState: OrbitCameraState,
+    perspective: ScenePerspective,
   ) => void;
+  setProbeVisible: (visible: boolean) => void;
   setZoom: (zoom: number) => void;
   stop: () => void;
 };
@@ -112,6 +130,7 @@ type MotionTransition<T> = {
 type ProbeVisualRuntime = {
   engineGlowMaterial: THREE.MeshStandardMaterial;
   group: THREE.Group;
+  pickables: THREE.Object3D[];
   streakMaterials: Array<{
     material: THREE.LineBasicMaterial;
     opacityScale: number;
@@ -139,6 +158,14 @@ const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 2.4;
 const DEFAULT_ZOOM = 1.15;
 const PLAYBACK_TRANSITION_MS = 80;
+const ENCOUNTER_CLEARANCE_MULTIPLIER = 1.08;
+const ARRIVAL_SEGMENT_TYPES = new Set([
+  "arrivalHyperbolicApproach",
+  "orbitInsertionBurn",
+  "parkingOrbit",
+  "arrivalCapture",
+  "scienceOrbit",
+]);
 
 type PointerOrbitGesture = {
   pointerId: number;
@@ -176,12 +203,18 @@ export default function SolarSystemScene({
   const runtimeRef = useRef<SceneRuntime | null>(null);
   const pointerGestureRef = useRef<PointerOrbitGesture | null>(null);
   const touchGestureRef = useRef<TouchOrbitGesture | null>(null);
+  const orbitLoopFrameRef = useRef<number | null>(null);
+  const captureOrbitElapsedSecondsRef = useRef(0);
   const [renderMode, setRenderMode] = useState<"webgl" | "fallback">("fallback");
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
   const [orbitCameraState, setOrbitCameraState] = useState<OrbitCameraState>(() => createDefaultOrbitCameraState());
   const [hoveredBodyId, setHoveredBodyId] = useState<string | null>(null);
+  const [scenePerspective, setScenePerspective] = useState<ScenePerspective>("topdown-follow");
+  const [selectedPhaseJumpId, setSelectedPhaseJumpId] = useState<string | null>(null);
+  const [captureOrbitElapsedSeconds, setCaptureOrbitElapsedSeconds] = useState(0);
   const copy = t(language);
   const telemetry = buildSpeedTelemetry(result.samples, selectedSampleIndex, "speed");
+  const navigationVisuals = buildNavigationVisuals(result, selectedSampleIndex, launchEpoch);
   const arrivalCaptureModel = buildArrivalCaptureModel(result);
   const displayedCapturePathPoints = arrivalCaptureModel
     ? buildDisplayCapturePathPoints(
@@ -192,18 +225,65 @@ export default function SolarSystemScene({
   const activeManeuver = findActiveManeuver(result.maneuverEvents, currentEpoch);
   const upcomingManeuver = activeManeuver ? null : findUpcomingManeuver(result.maneuverEvents, currentEpoch);
   const timelineSnapshot = getMissionTimelineSnapshot(result.missionTimeline, currentEpoch);
+  const activePhaseJumpId = selectedPhaseJumpId ?? timelineSnapshot.currentPhase?.id ?? null;
+  const playbackPhaseMarkers = buildMissionTimelinePhaseMarkers(
+    result.missionTimeline,
+    result.samples,
+    launchEpoch,
+    currentEpoch,
+    activePhaseJumpId,
+  );
+  const activePlaybackPhaseMarker = playbackPhaseMarkers.find((marker) => marker.isActive) ?? null;
   const nextEvent = timelineSnapshot.nextEvent;
   const currentObjective = result.missionTimeline?.currentObjective ?? planetLabel(language, result.closestApproach.bodyId);
   const nextEventSummary = nextEvent && currentEpoch
     ? `${nextEvent.title} · ${formatTimeUntil(currentEpoch, nextEvent.epoch, language)}`
     : nextEvent?.title ?? copy.noUpcomingEvent;
   const activeSegment = findActiveSegment(result.segments ?? [], currentEpoch);
+  const currentMissionSegmentLabel = activePlaybackPhaseMarker
+    ? formatPlaybackPhaseMarkerLabel(language, activePlaybackPhaseMarker)
+    : activeSegment
+      ? localizeMissionSegment(language, activeSegment.segmentType)
+      : null;
   const baseSampleIndex = Math.min(selectedSampleIndex, Math.max(result.samples.length - 1, 0));
+  const isTerminalPlaybackSample = baseSampleIndex >= Math.max(result.samples.length - 1, 0);
   const activeSample = result.samples[baseSampleIndex] ?? result.samples[0];
   const displayedPathSamples = result.samples.slice(0, baseSampleIndex + 1);
-  const cameraView = activeSample
+  const captureBody = arrivalCaptureModel
+    ? bodies.find((body) => body.bodyId === arrivalCaptureModel.bodyId) ?? null
+    : null;
+  const captureLoopDurationSeconds =
+    arrivalCaptureModel && captureBody
+      ? arrivalCaptureModel.durationSeconds ??
+        estimateArrivalCaptureOrbitDurationSeconds(arrivalCaptureModel.pathPoints, captureBody.muKm3PerS2)
+      : null;
+  const captureOrbitPlaybackState =
+    activeSample &&
+    isTerminalPlaybackSample &&
+    displayedCapturePathPoints &&
+    captureBody
+      ? sampleArrivalCaptureOrbit(
+          displayedCapturePathPoints,
+          captureBody.positionKm,
+          captureLoopDurationSeconds && captureLoopDurationSeconds > 0
+            ? captureOrbitElapsedSeconds / captureLoopDurationSeconds
+            : 0,
+        )
+      : null;
+  const terminalOrbitProbeSample =
+    activeSample && captureOrbitPlaybackState
+      ? {
+          ...activeSample,
+          positionKm: captureOrbitPlaybackState.positionKm,
+          velocityKmPerSec: captureOrbitPlaybackState.velocityKmPerSec,
+        }
+      : null;
+  const sceneProbeSample =
+    terminalOrbitProbeSample ??
+    activeSample;
+  const cameraView = sceneProbeSample
     ? computeProbeCameraView({
-        sample: activeSample,
+        sample: sceneProbeSample,
         bodies,
         closestApproach: result.closestApproach,
         activeSegment,
@@ -248,8 +328,8 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncMissionScene(runtime, result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints);
-  }, [result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints]);
+    syncMissionScene(runtime, result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints, navigationVisuals);
+  }, [result, launchEpoch, language, arrivalCaptureModel, displayedCapturePathPoints, navigationVisuals]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -257,8 +337,8 @@ export default function SolarSystemScene({
       return;
     }
 
-    syncPlaybackScene(runtime, bodies, result, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, activeSample, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints);
-  }, [activeSample, bodies, result, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints]);
+    syncPlaybackScene(runtime, bodies, result, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, scenePerspective, activeSample, terminalOrbitProbeSample, activeSegment, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints);
+  }, [activeSample, activeSegment, bodies, result, selectedSampleIndex, hoveredBodyId, language, cameraView, zoomLevel, orbitCameraState, scenePerspective, displayedPathSamples, currentEpoch, arrivalCaptureModel, displayedCapturePathPoints, terminalOrbitProbeSample]);
 
   useEffect(() => {
     runtimeRef.current?.setZoom(zoomLevel);
@@ -266,9 +346,71 @@ export default function SolarSystemScene({
 
   useEffect(() => {
     setOrbitCameraState(createDefaultOrbitCameraState());
+    setScenePerspective("topdown-follow");
+    setSelectedPhaseJumpId(null);
+    captureOrbitElapsedSecondsRef.current = 0;
+    setCaptureOrbitElapsedSeconds(0);
     pointerGestureRef.current = null;
     touchGestureRef.current = null;
   }, [result]);
+
+  useEffect(() => {
+    if (orbitLoopFrameRef.current != null) {
+      window.cancelAnimationFrame(orbitLoopFrameRef.current);
+      orbitLoopFrameRef.current = null;
+    }
+
+    const canLoopCaptureOrbit =
+      isPlaying &&
+      isTerminalPlaybackSample &&
+      displayedCapturePathPoints != null &&
+      displayedCapturePathPoints.length > 1 &&
+      captureBody != null;
+    if (canLoopCaptureOrbit) {
+      const startElapsedSeconds = captureOrbitElapsedSecondsRef.current;
+      const startTimeMs = performance.now() - startElapsedSeconds * 1000;
+      const tick = (now: number) => {
+        const nextElapsedSeconds = (now - startTimeMs) / 1000;
+        captureOrbitElapsedSecondsRef.current = nextElapsedSeconds;
+        setCaptureOrbitElapsedSeconds(nextElapsedSeconds);
+        orbitLoopFrameRef.current = window.requestAnimationFrame(tick);
+      };
+      orbitLoopFrameRef.current = window.requestAnimationFrame(tick);
+      return () => {
+        if (orbitLoopFrameRef.current != null) {
+          window.cancelAnimationFrame(orbitLoopFrameRef.current);
+          orbitLoopFrameRef.current = null;
+        }
+      };
+    }
+
+    if (!isTerminalPlaybackSample) {
+      captureOrbitElapsedSecondsRef.current = 0;
+      setCaptureOrbitElapsedSeconds(0);
+    }
+
+    return () => {
+      if (orbitLoopFrameRef.current != null) {
+        window.cancelAnimationFrame(orbitLoopFrameRef.current);
+        orbitLoopFrameRef.current = null;
+      }
+    };
+  }, [
+    captureBody,
+    displayedCapturePathPoints,
+    isPlaying,
+    isTerminalPlaybackSample,
+  ]);
+
+  function handlePlaybackSampleChange(nextIndex: number) {
+    setSelectedPhaseJumpId(null);
+    onSampleIndexChange(nextIndex);
+  }
+
+  function handlePhaseJump(phaseId: string, sampleIndex: number) {
+    setSelectedPhaseJumpId(phaseId);
+    onSampleIndexChange(sampleIndex);
+  }
 
   function handleZoomChange(nextZoom: number) {
     setZoomLevel(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM));
@@ -317,6 +459,16 @@ export default function SolarSystemScene({
     }
 
     event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }
+
+  function handleSurfaceClick(event: ReactPointerEvent<HTMLDivElement>) {
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return;
+    }
+
+    const clickedProbe = runtime.hitTestProbe(event.clientX, event.clientY);
+    setScenePerspective((current) => resolveNextScenePerspective(current, clickedProbe));
   }
 
   function handleSurfaceWheel(event: ReactWheelEvent<HTMLDivElement>) {
@@ -405,12 +557,32 @@ export default function SolarSystemScene({
       <div className="scene-shell__hud">
         <div className="scene-shell__hud-copy">
           <p>{currentEpoch ? `${copy.currentEpoch}: ${currentEpoch}` : copy.currentEpochPending}</p>
-          {activeSegment ? (
-            <p>{`${copy.missionSegments}: ${localizeMissionSegment(language, activeSegment.segmentType)}`}</p>
+          {currentMissionSegmentLabel ? (
+            <p>{`${copy.missionSegments}: ${currentMissionSegmentLabel}`}</p>
           ) : null}
           <p>{`${copy.missionObjective}: ${currentObjective}`}</p>
           <p>{`${copy.nextEvent}: ${nextEventSummary}`}</p>
           <p>{`${copy.currentSpeed}: ${formatSpeedValue(telemetry.currentValue)}`}</p>
+          {navigationVisuals.hud ? (
+            <>
+              <p>{`${copy.navigationMode}: ${copy.navigationDispersed}`}</p>
+              {navigationVisuals.hud.predictedMissKm != null ? (
+                <p>{`${copy.maxPredictedMiss}: ${formatDistanceKmValue(navigationVisuals.hud.predictedMissKm)}`}</p>
+              ) : null}
+              {navigationVisuals.hud.positionDeviationKm != null ? (
+                <p>{`${copy.maxPositionDeviation}: ${formatDistanceKmValue(navigationVisuals.hud.positionDeviationKm)}`}</p>
+              ) : null}
+              <p>
+                {`${copy.correctionStatus}: ${
+                  navigationVisuals.hud.correctionStatus === "within-thresholds"
+                    ? copy.withinThresholds
+                    : navigationVisuals.hud.correctionStatus === "tcm-triggered"
+                      ? copy.activeManeuver
+                      : copy.maneuverExecution
+                }`}
+              </p>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -422,6 +594,7 @@ export default function SolarSystemScene({
         onPointerMove={handleSurfacePointerMove}
         onPointerUp={handleSurfacePointerUp}
         onPointerCancel={handleSurfacePointerUp}
+        onClick={handleSurfaceClick}
         onWheel={handleSurfaceWheel}
         onTouchStart={handleSurfaceTouchStart}
         onTouchMove={handleSurfaceTouchMove}
@@ -435,6 +608,7 @@ export default function SolarSystemScene({
           <span
             hidden
             data-testid="arrival-capture-orbit"
+            data-probe-mode={terminalOrbitProbeSample ? "capture-orbit" : "transfer"}
             data-source={arrivalCaptureModel.source}
           />
         ) : null}
@@ -494,16 +668,34 @@ export default function SolarSystemScene({
         <div className="scene-shell__footer-main">
           <div className="scene-shell__footer-controls">
             <div className="scene-playback-actions">
-              <button type="button" className="scene-action-button" onClick={isPlaying ? onPause : onPlay}>
+              <button
+                type="button"
+                className="scene-action-button"
+                onClick={() => {
+                  if (isPlaying) {
+                    onPause();
+                    return;
+                  }
+                  setSelectedPhaseJumpId(null);
+                  onPlay();
+                }}
+              >
                 {isPlaying ? copy.pause : copy.start}
               </button>
-              <button type="button" className="scene-action-button scene-action-button--ghost" onClick={onReset}>
+              <button
+                type="button"
+                className="scene-action-button scene-action-button--ghost"
+                onClick={() => {
+                  setSelectedPhaseJumpId(null);
+                  onReset();
+                }}
+              >
                 {copy.reset}
               </button>
             </div>
 
-            <label className="scene-slider">
-              <span>{copy.playbackStep}</span>
+            <div className="scene-slider">
+              <span className="scene-slider__label">{copy.playbackStep}</span>
               <input
                 aria-label={copy.playbackStep}
                 type="range"
@@ -511,12 +703,12 @@ export default function SolarSystemScene({
                 max={Math.max(result.samples.length - 1, 0)}
                 step={1}
                 value={selectedSampleIndex}
-                onChange={(event) => onSampleIndexChange(Number(event.target.value))}
+                onChange={(event) => handlePlaybackSampleChange(Number(event.target.value))}
               />
-            </label>
+            </div>
 
             <label className="scene-slider scene-slider--compact">
-              <span>{copy.zoomLevel}</span>
+              <span className="scene-slider__label">{copy.zoomLevel}</span>
               <input
                 aria-label={copy.zoomLevel}
                 type="range"
@@ -528,11 +720,49 @@ export default function SolarSystemScene({
               />
             </label>
           </div>
+
+          {playbackPhaseMarkers.length ? (
+            <div
+              className="scene-phase-jump-bar"
+              data-testid="playback-phase-jump-bar"
+              aria-label={copy.phaseTimeline}
+            >
+              {playbackPhaseMarkers.map((marker) => (
+                <button
+                  key={marker.id}
+                  type="button"
+                  className="scene-phase-jump-chip"
+                  data-active={marker.isActive ? "true" : "false"}
+                  data-testid={`playback-phase-jump-${marker.id}`}
+                  aria-label={`${copy.phaseTimeline}: ${formatPlaybackPhaseMarkerLabel(language, marker)} · ${marker.startEpoch}`}
+                  aria-pressed={marker.isActive}
+                  title={`${formatPlaybackPhaseMarkerLabel(language, marker)} · ${marker.startEpoch}`}
+                  onClick={() => handlePhaseJump(marker.id, marker.sampleIndex)}
+                >
+                  {formatPlaybackPhaseMarkerLabel(language, marker)}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
       </div>
     </section>
   );
+}
+
+function formatPlaybackPhaseMarkerLabel(language: Language, marker: MissionTimelinePhaseMarker): string {
+  if (
+    marker.phaseType === "targetApproach" ||
+    marker.phaseType === "arrivalPass" ||
+    marker.phaseType === "scienceOperations" ||
+    marker.phaseType === "downlink"
+  ) {
+    return marker.title;
+  }
+
+  const localized = localizeMissionSegment(language, marker.phaseType);
+  return localized === marker.phaseType ? marker.title : localized;
 }
 
 function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement): SceneRuntime | null {
@@ -561,6 +791,9 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     const bodiesGroup = new THREE.Group();
     const playbackGroup = new THREE.Group();
     const probeVisual = createProbeVisual();
+    let probeVisible = true;
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
 
     scene.add(ambient);
     scene.add(sunLight);
@@ -582,7 +815,7 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
     };
 
     const applyProbeMotion = (motion: ProbeMotionState) => {
-      probeVisual.group.visible = true;
+      probeVisual.group.visible = probeVisible;
       probeVisual.group.position.set(motion.position[0], motion.position[1], motion.position[2]);
       probeVisual.group.lookAt(
         motion.position[0] + motion.forward[0],
@@ -683,6 +916,21 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
       targetBodies: null,
       targetMotion: null,
       targetProbeMotion: null,
+      hitTestProbe: (clientX, clientY) => {
+        if (!probeVisual.group.visible) {
+          return false;
+        }
+
+        const bounds = surface.getBoundingClientRect();
+        if (bounds.width <= 0 || bounds.height <= 0) {
+          return false;
+        }
+
+        pointer.x = ((clientX - bounds.left) / bounds.width) * 2 - 1;
+        pointer.y = -((clientY - bounds.top) / bounds.height) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        return raycaster.intersectObjects(probeVisual.pickables, true).length > 0;
+      },
       setProbeTarget: (motion) => {
         if (runtime.targetProbeMotion && isProbeMotionClose(runtime.targetProbeMotion, motion)) {
           return;
@@ -703,8 +951,8 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
           target: motion,
         };
       },
-      setView: (samplePositionKm, view, zoom, orbitState) => {
-        const frame = buildProbeCameraFrame(samplePositionKm, view, zoom, orbitState);
+      setView: (samplePositionKm, view, zoom, orbitState, perspective) => {
+        const frame = buildProbeCameraFrame(samplePositionKm, view, zoom, orbitState, perspective);
 
         const nextTarget = {
           position: frame.position,
@@ -730,6 +978,11 @@ function createSceneRuntime(canvas: HTMLCanvasElement, surface: HTMLDivElement):
           startTimeMs: performance.now(),
           target: nextTarget,
         };
+      },
+      setProbeVisible: (visible) => {
+        probeVisible = visible;
+        probeVisual.group.visible = visible;
+        render();
       },
       setZoom: (zoom: number) => {
         if (runtime.targetMotion) {
@@ -779,6 +1032,7 @@ function syncMissionScene(
   language: Language,
   arrivalCaptureModel: ReturnType<typeof buildArrivalCaptureModel>,
   displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
+  navigationVisuals: NavigationVisuals,
 ){
   clearGroup(runtime.missionGroup);
 
@@ -807,9 +1061,22 @@ function syncMissionScene(
       }
     }
   }
+  for (const navigationMarker of navigationVisuals.tcmMarkers) {
+    runtime.missionGroup.add(createManeuverMarker(navigationMarker.sample.positionKm, "TCM", language));
+  }
+
+  if (navigationVisuals.nominalPath.length > 0) {
+    const nominalTrajectorySamples = buildDisplayTrajectorySamples(
+      navigationVisuals.nominalPath,
+      result.closestApproach.epochSeconds,
+      null,
+      null,
+    );
+    runtime.missionGroup.add(createTrajectoryLine(nominalTrajectorySamples, "#b5c7d1", 0.12));
+  }
 
   const missionTrajectorySamples = buildDisplayTrajectorySamples(
-    result.samples,
+    navigationVisuals.dispersedPath.length > 0 ? navigationVisuals.dispersedPath : result.samples,
     result.closestApproach.epochSeconds,
     displayedCapturePathPoints,
     closestSample?.positionKm ?? null,
@@ -832,14 +1099,17 @@ function syncPlaybackScene(
   cameraView: ProbeCameraView | null,
   zoomLevel: number,
   orbitCameraState: OrbitCameraState,
+  scenePerspective: ScenePerspective,
   activeSample: TrajectoryResult["samples"][number],
+  terminalOrbitProbeSample: TrajectoryResult["samples"][number] | null,
+  activeSegment: MissionSegment | null,
   displayedPathSamples: TrajectoryResult["samples"],
   currentEpoch: string | null,
   arrivalCaptureModel: ReturnType<typeof buildArrivalCaptureModel>,
   displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
 ) {
   clearGroup(runtime.playbackGroup);
-  syncBodyVisuals(runtime, bodies, hoveredBodyId, cameraView, result.closestApproach.bodyId);
+  syncBodyVisuals(runtime, bodies, hoveredBodyId, cameraView, result.closestApproach.bodyId, language, scenePerspective);
 
   if (!runtime.currentBodies) {
     runtime.currentBodies = bodies;
@@ -856,16 +1126,50 @@ function syncPlaybackScene(
     };
   }
 
-  if (activeSample && cameraView) {
+  const activeEncounter = shouldUseEncounterDisplayAdjustment(activeSegment?.segmentType)
+    ? resolveActiveEncounterDisplay(
+        bodies,
+        result,
+        activeSegment,
+        arrivalCaptureModel,
+      )
+    : null;
+  const adjustedDisplayedPathSamples = activeEncounter
+    ? buildStableEncounterAdjustedSamples(result.samples, displayedPathSamples.length, {
+        bodyPositionKm: activeEncounter.bodyPositionKm,
+        encounterIndex: activeEncounter.encounterIndex,
+        minSceneRadius: activeEncounter.minSceneRadius,
+        halfWindow: activeEncounter.halfWindow,
+      })
+    : displayedPathSamples;
+  const displayedActiveSample =
+    adjustedDisplayedPathSamples[adjustedDisplayedPathSamples.length - 1] ??
+    activeSample;
+
+  if ((terminalOrbitProbeSample || displayedActiveSample) && cameraView) {
+    const probePositionSample = terminalOrbitProbeSample
+      ? terminalOrbitProbeSample
+      : activeEncounter
+      ? {
+          ...displayedActiveSample,
+          positionKm: enforceMinimumEncounterClearance(
+            displayedActiveSample.positionKm,
+            activeEncounter.bodyPositionKm,
+            activeEncounter.minSceneRadius,
+          ),
+        }
+      : displayedActiveSample;
     runtime.setView(
-      activeSample.positionKm,
+      probePositionSample.positionKm,
       cameraView,
       zoomLevel,
       orbitCameraState,
+      scenePerspective,
     );
-    runtime.setProbeTarget(buildProbeMotionState(activeSample, currentEpoch, result.maneuverEvents));
+    runtime.setProbeTarget(buildProbeMotionState(probePositionSample, currentEpoch, result.maneuverEvents));
+    runtime.setProbeVisible(scenePerspective !== "first-person");
   } else {
-    runtime.probeVisual.group.visible = false;
+    runtime.setProbeVisible(false);
     runtime.currentProbeMotion = null;
     runtime.probeMotionTransition = null;
     runtime.targetProbeMotion = null;
@@ -873,21 +1177,51 @@ function syncPlaybackScene(
 
   const captureCenter = bodies.find((body) => body.bodyId === arrivalCaptureModel?.bodyId)?.positionKm ?? null;
   const playbackTrajectorySamples = buildDisplayTrajectorySamples(
-    displayedPathSamples,
+    adjustedDisplayedPathSamples,
     result.closestApproach.epochSeconds,
     displayedCapturePathPoints,
     captureCenter,
   );
 
-  runtime.playbackGroup.add(createTrajectoryLine(playbackTrajectorySamples, "#8fe3ff", 0.96));
-  runtime.playbackGroup.add(createTrajectoryMarkers(playbackTrajectorySamples));
-  if (displayedCapturePathPoints && captureCenter) {
-    runtime.playbackGroup.add(
-      createCaptureOrbitLine(displayedCapturePathPoints, captureCenter, "#ffd59a", 0.96),
-    );
+  for (const visual of createPlaybackTrajectoryVisuals(
+    playbackTrajectorySamples,
+    displayedCapturePathPoints,
+    captureCenter,
+  )) {
+    runtime.playbackGroup.add(visual);
   }
 
   runtime.render();
+}
+
+function resolveActiveEncounterDisplay(
+  bodies: BodyState[],
+  result: TrajectoryResult,
+  activeSegment: MissionSegment | null,
+  arrivalCaptureModel: ReturnType<typeof buildArrivalCaptureModel>,
+) {
+  if (!result.samples.length) {
+    return null;
+  }
+
+  if (arrivalCaptureModel && activeSegment && ARRIVAL_SEGMENT_TYPES.has(activeSegment.segmentType)) {
+    const body = bodies.find((candidate) => candidate.bodyId === arrivalCaptureModel.bodyId);
+    if (!body) {
+      return null;
+    }
+
+    const closestIndex = result.samples.findIndex(
+      (sample) => sample.epochSeconds === result.closestApproach.epochSeconds,
+    );
+    return {
+      bodyPositionKm: body.positionKm,
+      encounterIndex: closestIndex >= 0 ? closestIndex : result.samples.length - 1,
+      minSceneRadius: bodySceneRadius(arrivalCaptureModel.bodyId) * ENCOUNTER_CLEARANCE_MULTIPLIER,
+      halfWindow: 2,
+    };
+  }
+
+  return null;
 }
 
 function findSampleForEpoch(result: TrajectoryResult, epochSeconds: number) {
@@ -924,6 +1258,8 @@ function syncBodyVisuals(
   hoveredBodyId: string | null,
   cameraView: ProbeCameraView | null,
   closestApproachBodyId: string,
+  language: Language,
+  scenePerspective: ScenePerspective,
 ) {
   const desiredIds = new Set(bodies.map((body) => body.bodyId));
 
@@ -938,8 +1274,13 @@ function syncBodyVisuals(
 
   for (const body of bodies) {
     const isHighlighted = hoveredBodyId === body.bodyId;
-    const isFocusBody = body.bodyId === cameraView?.focusBodyId || body.bodyId === closestApproachBodyId;
-    const focusScale = body.bodyId === cameraView?.focusBodyId ? cameraView.focusBodyScale : 1;
+    const { isFocusBody, focusScale } = resolveBodyFocusVisual({
+      bodyId: body.bodyId,
+      perspective: scenePerspective,
+      cameraFocusBodyId: cameraView?.focusBodyId ?? null,
+      cameraFocusScale: cameraView?.focusBodyScale ?? 1,
+      closestApproachBodyId,
+    });
     const styleKey = `${isHighlighted}:${isFocusBody}:${focusScale}`;
     const existing = runtime.bodyVisuals.get(body.bodyId);
 
@@ -956,6 +1297,7 @@ function syncBodyVisuals(
       isHighlighted,
       isFocusBody,
       focusScale,
+      language,
     );
 
     if (existing) {
@@ -1036,17 +1378,16 @@ function createCaptureOrbitLine(
   return new THREE.LineLoop(geometry, material);
 }
 
-function createTrajectoryMarkers(samples: TrajectoryResult["samples"]) {
-  const points = samples.map((sample) => toThreeVector(sample.positionKm));
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.PointsMaterial({
-    color: "#9cf3ff",
-    size: 2.4,
-    sizeAttenuation: false,
-    transparent: true,
-    opacity: 0.92,
-  });
-  return new THREE.Points(geometry, material);
+export function createPlaybackTrajectoryVisuals(
+  samples: TrajectoryResult["samples"],
+  displayedCapturePathPoints: ReturnType<typeof buildDisplayCapturePathPoints> | null,
+  captureCenter: [number, number, number] | null,
+) {
+  const visuals: THREE.Object3D[] = [createTrajectoryLine(samples, "#8fe3ff", 0.96)];
+  if (displayedCapturePathPoints && captureCenter) {
+    visuals.push(createCaptureOrbitLine(displayedCapturePathPoints, captureCenter, "#ffd59a", 0.96));
+  }
+  return visuals;
 }
 
 function translateCapturePoint(
@@ -1065,6 +1406,7 @@ function createProbeVisual(): ProbeVisualRuntime {
   const orientedGroup = new THREE.Group();
   orientedGroup.rotation.y = PROBE_MODEL_ALIGNMENT_YAW_RAD;
   group.add(orientedGroup);
+  const pickables: THREE.Object3D[] = [];
 
   const modelGroup = new THREE.Group();
   modelGroup.scale.setScalar(PROBE_VISUAL_SCALE);
@@ -1086,6 +1428,7 @@ function createProbeVisual(): ProbeVisualRuntime {
   );
   bus.rotation.z = Math.PI / 2;
   modelGroup.add(bus);
+  pickables.push(bus);
 
   const dish = new THREE.Mesh(
     new THREE.SphereGeometry(1.35, 18, 18, 0, Math.PI),
@@ -1101,6 +1444,7 @@ function createProbeVisual(): ProbeVisualRuntime {
   dish.position.x = -2.2;
   dish.rotation.z = -Math.PI / 2;
   modelGroup.add(dish);
+  pickables.push(dish);
 
   const panelMaterial = new THREE.MeshStandardMaterial({
     color: "#4e86c8",
@@ -1112,9 +1456,11 @@ function createProbeVisual(): ProbeVisualRuntime {
   const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 4.8), panelMaterial);
   leftPanel.position.set(0, 0, 3.6);
   modelGroup.add(leftPanel);
+  pickables.push(leftPanel);
   const rightPanel = leftPanel.clone();
   rightPanel.position.set(0, 0, -3.6);
   modelGroup.add(rightPanel);
+  pickables.push(rightPanel);
 
   const engineGlowMaterial = new THREE.MeshStandardMaterial({
     color: "#f7bf66",
@@ -1130,6 +1476,7 @@ function createProbeVisual(): ProbeVisualRuntime {
   engineGlow.position.x = 2.6;
   engineGlow.rotation.z = -Math.PI / 2;
   effectsGroup.add(engineGlow);
+  pickables.push(engineGlow);
 
   const streakMaterials: ProbeVisualRuntime["streakMaterials"] = [];
   const streakCount = 10;
@@ -1155,6 +1502,7 @@ function createProbeVisual(): ProbeVisualRuntime {
   return {
     engineGlowMaterial,
     group,
+    pickables,
     streakMaterials,
   };
 }
@@ -1220,7 +1568,13 @@ function createAnchorMesh(
   return group;
 }
 
-function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: boolean, focusScale: number) {
+function createBodyMesh(
+  body: BodyState,
+  isHighlighted: boolean,
+  isFocusBody: boolean,
+  focusScale: number,
+  language: Language,
+) {
   const radius = bodySceneRadius(body.bodyId);
   const group = new THREE.Group();
   const focusVisual = isFocusBody ? computeFocusBodyVisualProfile(body.bodyId, focusScale >= 2 ? "flyby-emphasis" : focusScale > 1 ? "approach-emphasis" : "cruise-follow") : null;
@@ -1269,6 +1623,15 @@ function createBodyMesh(body: BodyState, isHighlighted: boolean, isFocusBody: bo
   }
   if (isHighlighted || isFocusBody) {
     group.scale.setScalar(isFocusBody ? Math.min(focusScale, 1.04) : 1.06);
+  }
+  if (body.bodyId !== "sun") {
+    const label = createAnchorLabel(
+      planetLabel(language, body.bodyId),
+      new THREE.Color(bodyColors[body.bodyId] ?? "#f5f3ed"),
+    );
+    label.position.set(0, radius * 1.65 + 1.1, 0);
+    label.scale.multiplyScalar(0.52);
+    group.add(label);
   }
   return group;
 }
@@ -1497,15 +1860,15 @@ function formatMassKg(value: number) {
   return `${value.toFixed(1)} kg`;
 }
 
+function formatDistanceKmValue(value: number) {
+  return `${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: value >= 100 ? 0 : 1,
+  }).format(value)} km`;
+}
+
 function formatTimeUntil(currentEpoch: string, eventEpoch: string, language: Language) {
   const deltaSeconds = Math.max((new Date(eventEpoch).getTime() - new Date(currentEpoch).getTime()) / 1000, 0);
-  const days = deltaSeconds / 86_400;
-  if (days >= 1) {
-    return language === "zh" ? `${days.toFixed(1)} 天后` : `in ${days.toFixed(1)} days`;
-  }
-
-  const hours = deltaSeconds / 3_600;
-  return language === "zh" ? `${hours.toFixed(1)} 小时后` : `in ${hours.toFixed(1)} hours`;
+  return formatRelativeDurationSeconds(deltaSeconds, language);
 }
 
 function formatProbeViewMode(mode: ProbeCameraView["mode"], language: Language) {

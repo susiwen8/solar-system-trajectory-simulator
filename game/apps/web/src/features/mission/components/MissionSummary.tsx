@@ -1,5 +1,6 @@
 import type { TrajectoryResult } from "../types";
 import { localizeMissionSegment, localizeWarning, planetLabel, t, type Language } from "../../../lib/i18n";
+import { formatFlightDuration } from "../../../lib/duration";
 
 type MissionSummaryProps = {
   result: TrajectoryResult;
@@ -14,13 +15,6 @@ function formatNumber(value: number): string {
   }).format(value);
 }
 
-function formatFlightTimeDays(seconds: number): string {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 0,
-  }).format(seconds / 86400);
-}
-
 function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
   const durationHours = Math.max((Date.parse(endEpoch) - Date.parse(startEpoch)) / 3_600_000, 0);
   return new Intl.NumberFormat("en-US", {
@@ -30,6 +24,10 @@ function formatSegmentDuration(startEpoch: string, endEpoch: string): string {
 }
 
 function resolveVisitSequenceBodies(route: RouteDescriptor): string[] {
+  if (isClosedLoopRoute(route)) {
+    return resolveFullSequenceBodies(route);
+  }
+
   if (route.visitOrder?.length) {
     return ["earth", ...route.visitOrder];
   }
@@ -51,6 +49,11 @@ function resolveFullSequenceBodies(route: RouteDescriptor): string[] {
   }
 
   return route.sequenceBodies?.length ? route.sequenceBodies : [];
+}
+
+function isClosedLoopRoute(route: RouteDescriptor): boolean {
+  const fullSequence = resolveFullSequenceBodies(route);
+  return fullSequence.length > 1 && fullSequence[0] === "earth" && fullSequence[fullSequence.length - 1] === "earth";
 }
 
 function formatBodySequence(language: Language, bodyIds: string[]): string {
@@ -117,6 +120,7 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
   const visitSequence = resolveVisitSequenceBodies(result);
   const fullSequence = resolveFullSequenceBodies(result);
   const showFullSequence = fullSequence.length > 0 && fullSequence.join("|") !== visitSequence.join("|");
+  const navigationTelemetry = result.navigationTelemetry;
 
   return (
     <section className="summary-card" aria-label={copy.missionSummary}>
@@ -134,7 +138,7 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
         </article>
         <article className="summary-metric">
           <span className="summary-metric__label">{copy.flightTime}</span>
-          <strong>{formatFlightTimeDays(result.flightTimeSeconds)} {copy.dayUnit}</strong>
+          <strong>{formatFlightDuration(result.flightTimeSeconds, language)}</strong>
         </article>
         <article className="summary-metric">
           <span className="summary-metric__label">{copy.ephemeris}</span>
@@ -179,6 +183,42 @@ export default function MissionSummary({ result, language }: MissionSummaryProps
       ) : (
         <p className="summary-ok">{copy.noWarnings}</p>
       )}
+
+      {navigationTelemetry?.enabled ? (
+        <div className="summary-segments" aria-label={copy.navigationSummary}>
+          <p className="summary-card__eyebrow">{copy.navigationSummary}</p>
+          <div className="summary-metrics">
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.maneuverCount}</span>
+              <strong>{navigationTelemetry.tcmCount}</strong>
+            </article>
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.cumulativeCorrectionDeltaV}</span>
+              <strong>{navigationTelemetry.cumulativeCorrectionDeltaVKmPerS.toFixed(3)} km/s</strong>
+            </article>
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.maxPredictedMiss}</span>
+              <strong>{formatNumber(navigationTelemetry.maxPredictedMissKm)} km</strong>
+            </article>
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.maxPositionDeviation}</span>
+              <strong>{formatNumber(navigationTelemetry.maxPositionDeviationKm)} km</strong>
+            </article>
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.maxVelocityDeviation}</span>
+              <strong>{navigationTelemetry.maxVelocityDeviationKmPerS.toFixed(3)} km/s</strong>
+            </article>
+            <article className="summary-metric">
+              <span className="summary-metric__label">{copy.finalPredictedMiss}</span>
+              <strong>
+                {navigationTelemetry.finalPredictedMissKm != null
+                  ? `${formatNumber(navigationTelemetry.finalPredictedMissKm)} km`
+                  : "—"}
+              </strong>
+            </article>
+          </div>
+        </div>
+      ) : null}
 
       {segments.length > 0 ? (
         <div className="summary-segments" aria-label={copy.missionSegments}>

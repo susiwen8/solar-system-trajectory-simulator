@@ -43,6 +43,27 @@ class PropulsionConfig(BaseModel):
         return self
 
 
+class InjectionDispersionConfig(BaseModel):
+    positionSigmaKm: float = Field(default=25.0, ge=0)
+    velocitySigmaKmPerS: float = Field(default=0.02, ge=0)
+
+
+class CorrectionPolicy(BaseModel):
+    maxTcmCount: int = Field(default=3, ge=0, le=8)
+    predictedMissThresholdKm: float = Field(default=25_000.0, gt=0)
+    positionDeviationThresholdKm: float = Field(default=5_000.0, gt=0)
+    velocityDeviationThresholdKmPerS: float = Field(default=0.05, gt=0)
+    checkpointStepSeconds: float = Field(default=432_000.0, gt=0)
+    maxCorrectionDeltaVKmPerS: float = Field(default=0.03, gt=0)
+
+
+class NavigationConfig(BaseModel):
+    enabled: bool = False
+    randomSeed: Optional[int] = None
+    injectionDispersion: InjectionDispersionConfig = Field(default_factory=InjectionDispersionConfig)
+    correctionPolicy: CorrectionPolicy = Field(default_factory=CorrectionPolicy)
+
+
 class ManeuverEvent(BaseModel):
     type: str = Field(min_length=1)
     startEpoch: str = Field(min_length=1)
@@ -52,6 +73,40 @@ class ManeuverEvent(BaseModel):
     propellantUsedKg: float = Field(ge=0)
     massBeforeKg: float = Field(gt=0)
     massAfterKg: float = Field(gt=0)
+
+
+class TrajectorySample(BaseModel):
+    epochSeconds: float
+    positionKm: Tuple[float, float, float]
+    velocityKmPerSec: Tuple[float, float, float]
+    massKg: Optional[float] = None
+
+
+class NavigationEvent(BaseModel):
+    type: Literal["dispersionInjected", "tcmTriggered", "tcmExecuted"]
+    epoch: str = Field(min_length=1)
+    reason: Optional[Literal["predictedMiss", "stateDeviation", "both"]] = None
+    predictedMissBeforeKm: Optional[float] = Field(default=None, ge=0)
+    predictedMissAfterKm: Optional[float] = Field(default=None, ge=0)
+    positionDeviationBeforeKm: Optional[float] = Field(default=None, ge=0)
+    positionDeviationAfterKm: Optional[float] = Field(default=None, ge=0)
+    velocityDeviationBeforeKmPerS: Optional[float] = Field(default=None, ge=0)
+    velocityDeviationAfterKmPerS: Optional[float] = Field(default=None, ge=0)
+    deltaVKmPerS: Optional[float] = Field(default=None, ge=0)
+    propellantUsedKg: Optional[float] = Field(default=None, ge=0)
+
+
+class NavigationTelemetry(BaseModel):
+    enabled: bool = False
+    nominalSamples: List[TrajectorySample] = Field(default_factory=list)
+    dispersedSamples: List[TrajectorySample] = Field(default_factory=list)
+    navigationEvents: List[NavigationEvent] = Field(default_factory=list)
+    tcmCount: int = Field(default=0, ge=0)
+    cumulativeCorrectionDeltaVKmPerS: float = Field(default=0.0, ge=0)
+    maxPredictedMissKm: float = Field(default=0.0, ge=0)
+    maxPositionDeviationKm: float = Field(default=0.0, ge=0)
+    maxVelocityDeviationKmPerS: float = Field(default=0.0, ge=0)
+    finalPredictedMissKm: Optional[float] = Field(default=None, ge=0)
 
 
 class MissionTimelineEvent(BaseModel):
@@ -128,6 +183,7 @@ class MissionRequest(BaseModel):
     durationSeconds: Optional[float] = Field(default=None, gt=0)
     outputStepSeconds: Optional[float] = Field(default=None, gt=0)
     propulsionConfig: Optional[PropulsionConfig] = None
+    navigationConfig: Optional[NavigationConfig] = None
 
 
 class MissionTourRequest(BaseModel):
@@ -138,7 +194,9 @@ class MissionTourRequest(BaseModel):
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
     allowAssistBodies: bool = True
     allowRepeatedFlybys: bool = True
+    returnToDeparture: bool = False
     propulsionConfig: Optional[PropulsionConfig] = None
+    navigationConfig: Optional[NavigationConfig] = None
 
     @model_validator(mode="after")
     def validate_required_visit_bodies(self) -> "MissionTourRequest":
@@ -160,6 +218,7 @@ class LaunchWindowRequest(BaseModel):
     maxReturnedCandidates: int = Field(default=5, ge=1, le=10)
     allowAssistBodies: bool = True
     allowRepeatedFlybys: bool = True
+    returnToDeparture: bool = False
     propulsionConfig: Optional[PropulsionConfig] = None
 
     @model_validator(mode="after")
