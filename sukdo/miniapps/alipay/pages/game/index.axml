@@ -1,0 +1,79 @@
+<view class="page-shell">
+  <view class="top-timer-card">
+    <view class="timer-label">计时</view>
+    <view class="timer-value">{{timerText}}</view>
+  </view>
+
+  <view class="panel-card board-panel">
+    <view class="board-shell">
+      <view class="board">
+        <view a:for="{{cells}}" a:key="key">
+          <view
+            class="cell {{item.fixed ? 'fixed' : ''}} {{item.playerEntry ? 'player-entry' : ''}} {{item.prefillEntry ? 'prefill-entry' : ''}} {{item.selected ? 'selected' : ''}} {{item.related ? 'related' : ''}} {{item.sameValue ? 'same-value' : ''}} {{item.traceOrigin ? 'trace-origin' : ''}} {{item.boxRight ? 'box-right' : ''}} {{item.boxBottom ? 'box-bottom' : ''}}"
+            data-row="{{item.row}}"
+            data-col="{{item.col}}"
+            onTap="handleCellTap"
+          >
+            <view a:if="{{item.displayValue}}" class="cell-content">{{item.displayValue}}</view>
+            <view a:else class="notes-grid">
+              <text a:for="{{item.notes}}" a:key="value" a:for-item="note" class="note">{{note.label}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="panel-card controls-panel">
+    <view class="difficulty-row">
+      <view a:for="{{difficultyOptions}}" a:key="value">
+        <view
+          class="difficulty-pill {{item.active ? 'active' : ''}}"
+          data-difficulty="{{item.value}}"
+          onTap="handleDifficultyTap"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </view>
+
+    <view class="keypad">
+      <view
+        a:for="{{keypadDigits}}"
+        a:key="*this"
+        class="keypad-button control-chip subtle {{activeDigit === item ? 'active' : ''}}"
+        data-digit="{{item}}"
+        onTap="handleDigitTap"
+      >{{item}}</view>
+    </view>
+
+    <view class="action-grid">
+      <view class="action-button control-chip {{notesMode ? 'primary' : ''}}" onTap="handleToggleNotes">笔记</view>
+      <view class="action-button control-chip {{prefillMode ? 'primary' : ''}}" onTap="handleTogglePrefill">试填</view>
+      <view class="action-button control-chip" onTap="handleLocatePrefill">纠错</view>
+      <view class="action-button control-chip" onTap="handleApplyHint">提示</view>
+      <view class="action-button control-chip" onTap="handleClearCell">清空</view>
+      <view class="action-button control-chip" onTap="handleResetGame">重开</view>
+      <view class="action-button control-chip accent" onTap="handleRefreshGame">换一局</view>
+      <view class="action-button control-chip" onTap="handleOpenRules">规则</view>
+      <view class="action-button control-chip" onTap="handleOpenSolver">解题</view>
+    </view>
+
+    <view a:if="{{message}}" class="message-inline">{{message}}</view>
+  </view>
+
+  <view a:if="{{newGameDialogVisible}}" class="new-game-dialog-mask" catchTap="noop">
+    <view class="new-game-dialog-card" catchTap="noop">
+      <view class="new-game-dialog-title">{{newGameDialogTitle}}</view>
+      <view class="new-game-dialog-content">{{newGameDialogContent}}</view>
+      <view class="new-game-confirm-check {{newGameDialogAcknowledged ? 'checked' : ''}}" onTap="handleToggleNewGameConfirm">
+        <view class="new-game-confirm-indicator">{{newGameDialogAcknowledged ? '✓' : ''}}</view>
+        <view class="new-game-confirm-label">{{newGameDialogSecondaryConfirmText}}</view>
+      </view>
+      <view class="new-game-dialog-actions">
+        <view class="new-game-dialog-button secondary" onTap="handleCancelNewGame">{{newGameDialogCancelText}}</view>
+        <view class="new-game-dialog-button accent {{newGameDialogConfirmEnabled ? '' : 'disabled'}}" onTap="handleConfirmNewGame">{{newGameDialogConfirmText}}</view>
+      </view>
+    </view>
+  </view>
+</view>

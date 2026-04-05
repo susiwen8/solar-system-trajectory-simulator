@@ -1,5 +1,10 @@
 import { analyzeBoard, cloneBoard, parseBoardInput, validateBoard } from './sudoku.js';
-import { buildSolverCells, formatSolverStep, getSolverMessage } from './solver-view.js';
+import {
+  buildGuideTimeline,
+  buildSolverBoardCells,
+  buildSolverStepItems,
+  getSolverMessage
+} from './solver-view.js';
 
 const SAMPLE_PUZZLE = [
   [5, 3, 0, 0, 7, 0, 0, 0, 0],
@@ -17,10 +22,6 @@ function createEmptyBoard() {
   return Array.from({ length: 9 }, () => Array(9).fill(0));
 }
 
-function serializeBoard(board) {
-  return board.flat().map((value) => (value === 0 ? '.' : String(value))).join('');
-}
-
 function loadBoardFromQuery() {
   const params = new URLSearchParams(window.location?.search ?? '');
   const puzzle = params.get('puzzle');
@@ -28,7 +29,6 @@ function loadBoardFromQuery() {
   if (!puzzle) {
     return {
       board: null,
-      input: '',
       error: ''
     };
   }
@@ -36,27 +36,24 @@ function loadBoardFromQuery() {
   try {
     return {
       board: parseBoardInput(puzzle),
-      input: puzzle,
       error: ''
     };
   } catch {
     return {
       board: null,
-      input: '',
-      error: '带入题目失败，请重新导入或手动填写。'
+      error: '带入题目失败，请重新刷新或手动填写。'
     };
   }
 }
 
 const elements = {
   board: document.querySelector('#solver-board'),
-  input: document.querySelector('#solver-input'),
-  importButton: document.querySelector('#solver-import'),
   solveButton: document.querySelector('#solver-solve'),
   clearButton: document.querySelector('#solver-clear'),
   sampleButton: document.querySelector('#solver-sample'),
+  guidePrevButton: document.querySelector('#solver-guide-prev'),
+  guideNextButton: document.querySelector('#solver-guide-next'),
   message: document.querySelector('#solver-message'),
-  resultBoard: document.querySelector('#solver-result-board'),
   steps: document.querySelector('#solver-steps'),
   stepCount: document.querySelector('#solver-step-count')
 };
@@ -71,22 +68,22 @@ if (Object.values(elements).every(Boolean)) {
       conflicts: []
     },
     analysis: null,
-    parseError: preload.error
+    parseError: preload.error,
+    guideTimeline: [],
+    guideStepIndex: -1
   };
 
   function updateValidation() {
     state.validation = validateBoard(state.board);
   }
 
-  function setBoard(nextBoard, options = {}) {
+  function setBoard(nextBoard) {
     state.board = cloneBoard(nextBoard);
     state.analysis = null;
     state.parseError = '';
+    state.guideTimeline = [];
+    state.guideStepIndex = -1;
     updateValidation();
-
-    if (options.syncInput !== false) {
-      elements.input.value = serializeBoard(state.board);
-    }
 
     render();
   }
@@ -105,17 +102,46 @@ if (Object.values(elements).every(Boolean)) {
     elements.message.textContent = getSolverMessage(state.analysis);
   }
 
-  function renderInputBoard() {
-    const markup = buildSolverCells(state.board, state.validation.conflicts).map((cell) => {
-      const classes = ['cell', 'solver-cell'];
+  function getActiveGuideStep() {
+    if (
+      state.analysis?.status !== 'solved' ||
+      !state.guideTimeline.length ||
+      state.guideStepIndex < 0 ||
+      state.guideStepIndex >= state.guideTimeline.length
+    ) {
+      return null;
+    }
 
-      if (cell.value !== 0) classes.push('player-entry');
-      if (cell.conflict) classes.push('conflict');
-      if (cell.row === state.selectedCell.row && cell.col === state.selectedCell.col) {
-        classes.push('selected');
+    return state.guideTimeline[state.guideStepIndex];
+  }
+
+  function renderBoard() {
+    const solved = state.analysis?.status === 'solved';
+    const activeGuideStep = getActiveGuideStep();
+    const displayedBoard = activeGuideStep?.board ?? (solved ? state.analysis.solution : state.board);
+    const highlightedValue = displayedBoard[state.selectedCell.row]?.[state.selectedCell.col] ?? 0;
+    const markup = buildSolverBoardCells(state.board, {
+      conflicts: solved ? [] : state.validation.conflicts,
+      selectedCell: state.selectedCell,
+      displayBoard: displayedBoard,
+      guideStep: activeGuideStep
+    }).map((cell) => {
+      const classes = ['cell', 'solver-cell'];
+      const sameValue =
+        highlightedValue !== 0 && !cell.selected && cell.value !== 0 && cell.value === highlightedValue;
+
+      if (cell.fixed) classes.push('fixed');
+      if (!cell.fixed && cell.playerEntry && solved) {
+        classes.push('result-cell');
+      } else if (!cell.fixed && cell.playerEntry) {
+        classes.push('player-entry');
       }
-      if ((cell.col + 1) % 3 === 0 && cell.col !== 8) classes.push('box-right');
-      if ((cell.row + 1) % 3 === 0 && cell.row !== 8) classes.push('box-bottom');
+      if (cell.conflict) classes.push('conflict');
+      if (cell.selected) classes.push('selected');
+      if (cell.guideFocus) classes.push('guide-focus');
+      if (sameValue) classes.push('same-value');
+      if (cell.boxRight) classes.push('box-right');
+      if (cell.boxBottom) classes.push('box-bottom');
 
       return `<button
         class="${classes.join(' ')}"
@@ -128,51 +154,57 @@ if (Object.values(elements).every(Boolean)) {
     elements.board.innerHTML = markup.join('');
   }
 
-  function renderResultBoard() {
+  function renderSteps() {
     if (state.analysis?.status !== 'solved') {
-      elements.resultBoard.innerHTML =
-        '<div class="solver-result-empty">求解后会在这里显示完整答案。</div>';
       elements.steps.innerHTML = '';
       elements.stepCount.textContent = '0';
       return;
     }
 
-    const markup = [];
-
-    for (let row = 0; row < 9; row += 1) {
-      for (let col = 0; col < 9; col += 1) {
-        const value = state.analysis.solution[row][col];
-        const classes = ['cell', 'solver-cell', 'result-cell'];
-
-        if (state.board[row][col] !== 0) {
-          classes.push('fixed');
-        } else {
-          classes.push('player-entry');
-        }
-
-        if ((col + 1) % 3 === 0 && col !== 8) classes.push('box-right');
-        if ((row + 1) % 3 === 0 && row !== 8) classes.push('box-bottom');
-
-        markup.push(`<button
-          class="${classes.join(' ')}"
-          data-row="${row}"
-          data-col="${col}"
-          aria-label="结果第 ${row + 1} 行第 ${col + 1} 列"
-        ><div class="cell-content">${value}</div></button>`);
-      }
-    }
-
-    elements.resultBoard.innerHTML = markup.join('');
-    elements.steps.innerHTML = state.analysis.steps
-      .map((step, index) => `<li>${formatSolverStep(step, index)}</li>`)
+    elements.steps.innerHTML = buildSolverStepItems(state.guideTimeline, state.guideStepIndex)
+      .map(
+        (step) => `<li
+          id="${step.key}"
+          class="solver-step${step.active ? ' active' : ''}${step.done ? ' done' : ''}"
+          data-step-index="${step.index}"
+          title="${step.title}"
+        >${step.text}</li>`
+      )
       .join('');
     elements.stepCount.textContent = String(state.analysis.steps.length);
   }
 
+  function renderGuideControls() {
+    const hasGuide = state.analysis?.status === 'solved' && state.guideTimeline.length > 0;
+
+    elements.guidePrevButton.disabled = !hasGuide || state.guideStepIndex <= 0;
+    elements.guideNextButton.disabled =
+      !hasGuide || state.guideStepIndex >= state.guideTimeline.length - 1;
+  }
+
+  function scrollActiveGuideStepIntoView() {
+    if (typeof elements.steps.querySelector !== 'function') {
+      return;
+    }
+
+    const activeStep = elements.steps.querySelector('.solver-step.active');
+
+    if (!activeStep || typeof activeStep.scrollIntoView !== 'function') {
+      return;
+    }
+
+    activeStep.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest'
+    });
+  }
+
   function render() {
-    renderInputBoard();
-    renderResultBoard();
+    renderBoard();
+    renderSteps();
+    renderGuideControls();
     setMessage();
+    scrollActiveGuideStepIntoView();
   }
 
   function updateCell(row, col, value) {
@@ -205,7 +237,7 @@ if (Object.values(elements).every(Boolean)) {
   function handleKeydown(event) {
     const tagName = event.target?.tagName?.toUpperCase?.() ?? '';
 
-    if (tagName === 'TEXTAREA' || tagName === 'INPUT') {
+    if (tagName === 'INPUT') {
       return;
     }
 
@@ -257,38 +289,79 @@ if (Object.values(elements).every(Boolean)) {
     }
   }
 
-  function importFromTextarea() {
-    try {
-      const parsed = parseBoardInput(elements.input.value);
-      setBoard(parsed, { syncInput: false });
-    } catch (error) {
-      state.analysis = null;
-      state.parseError = error instanceof Error ? error.message : '题目解析失败。';
-      render();
-    }
-  }
-
   function solveCurrentBoard() {
     state.analysis = analyzeBoard(state.board);
+
+    if (state.analysis?.status === 'solved') {
+      state.guideTimeline = buildGuideTimeline(state.board, state.analysis.steps);
+      state.guideStepIndex = state.guideTimeline.length ? state.guideTimeline.length - 1 : -1;
+
+      const activeGuideStep = getActiveGuideStep();
+      if (activeGuideStep) {
+        state.selectedCell = { row: activeGuideStep.row, col: activeGuideStep.col };
+      }
+    } else {
+      state.guideTimeline = [];
+      state.guideStepIndex = -1;
+    }
+
     render();
   }
 
+  function jumpToGuideStep(index) {
+    if (state.analysis?.status !== 'solved' || !state.guideTimeline.length) {
+      return;
+    }
+
+    const nextIndex = Number(index);
+
+    if (!Number.isFinite(nextIndex)) {
+      return;
+    }
+
+    state.guideStepIndex = Math.max(0, Math.min(Math.trunc(nextIndex), state.guideTimeline.length - 1));
+    const activeGuideStep = getActiveGuideStep();
+
+    if (activeGuideStep) {
+      state.selectedCell = { row: activeGuideStep.row, col: activeGuideStep.col };
+    }
+
+    render();
+  }
+
+  function moveGuideStep(offset) {
+    if (state.analysis?.status !== 'solved' || !state.guideTimeline.length) {
+      return;
+    }
+
+    jumpToGuideStep(state.guideStepIndex + offset);
+  }
+
   elements.board.addEventListener('click', handleBoardClick);
-  elements.importButton.addEventListener('click', importFromTextarea);
+  elements.steps.addEventListener('click', (event) => {
+    const item = event.target?.closest ? event.target.closest('[data-step-index]') : null;
+
+    if (!item) {
+      return;
+    }
+
+    jumpToGuideStep(item.dataset.stepIndex);
+  });
   elements.solveButton.addEventListener('click', solveCurrentBoard);
   elements.clearButton.addEventListener('click', () => {
-    elements.input.value = '';
-    setBoard(createEmptyBoard(), { syncInput: false });
+    setBoard(createEmptyBoard());
   });
   elements.sampleButton.addEventListener('click', () => {
-    elements.input.value = serializeBoard(SAMPLE_PUZZLE);
-    setBoard(SAMPLE_PUZZLE, { syncInput: false });
+    setBoard(SAMPLE_PUZZLE);
+  });
+  elements.guidePrevButton.addEventListener('click', () => {
+    moveGuideStep(-1);
+  });
+  elements.guideNextButton.addEventListener('click', () => {
+    moveGuideStep(1);
   });
   window.addEventListener('keydown', handleKeydown);
 
   updateValidation();
-  if (preload.input) {
-    elements.input.value = preload.input;
-  }
   render();
 }

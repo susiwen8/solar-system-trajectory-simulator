@@ -1,0 +1,11 @@
+{
+  "pages": ["pages/game/index", "pages/solver/index", "pages/rules/index"],
+  "window": {
+    "navigationBarTitleText": "Sukdo",
+    "navigationBarBackgroundColor": "#f6efe3",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f6efe3"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

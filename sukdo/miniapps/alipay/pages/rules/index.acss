@@ -1,0 +1,62 @@
+.page-shell {
+  padding: 20rpx 20rpx 44rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.hero-card {
+  padding: 26rpx 22rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 252, 247, 0.96);
+  border: 2rpx solid rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18rpx 48rpx rgba(66, 51, 29, 0.12);
+}
+
+.rule-card {
+  padding: 26rpx 22rpx;
+  border-radius: 28rpx;
+  background: rgba(255, 252, 247, 0.96);
+  border: 2rpx solid rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18rpx 48rpx rgba(66, 51, 29, 0.12);
+}
+
+.eyebrow,
+.section-title {
+  color: #60757b;
+  font-size: 22rpx;
+  letter-spacing: 3rpx;
+  font-weight: 600;
+}
+
+.hero-title {
+  margin-top: 14rpx;
+  font-size: 42rpx;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #17313a;
+}
+
+.hero-text,
+.rule-item {
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: rgba(23, 49, 58, 0.82);
+}
+
+.hero-text {
+  margin-top: 14rpx;
+}
+
+.rule-list {
+  margin-top: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.rule-item {
+  padding: 16rpx 18rpx;
+  border-radius: 20rpx;
+  background: rgba(47, 124, 125, 0.08);
+}

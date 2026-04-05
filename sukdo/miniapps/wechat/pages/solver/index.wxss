@@ -1,0 +1,238 @@
+.page-shell {
+  padding: 12rpx 12rpx 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.panel-card {
+  padding: 16rpx 14rpx;
+  border-radius: 22rpx;
+  background: rgba(255, 252, 247, 0.95);
+  border: 2rpx solid rgba(255, 255, 255, 0.82);
+  box-shadow: 0 18rpx 48rpx rgba(66, 51, 29, 0.12);
+}
+
+.section-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.section-title {
+  color: #60757b;
+  font-size: 22rpx;
+  letter-spacing: 3rpx;
+  font-weight: 600;
+}
+
+.helper-text {
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(47, 124, 125, 0.12);
+  color: #2f7c7d;
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.message,
+.result-placeholder,
+.step-item {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: rgba(23, 49, 58, 0.78);
+}
+
+.action-grid {
+  display: grid;
+  gap: 12rpx;
+}
+
+.compact-toolbar {
+  padding-bottom: 12rpx;
+}
+
+.board-shell {
+  margin-top: 10rpx;
+  padding: 8rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(180deg, rgba(221, 236, 233, 0.72), rgba(251, 248, 242, 0.92));
+  box-shadow: inset 0 0 0 2rpx rgba(34, 74, 83, 0.08);
+}
+
+.board {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  border: 2rpx solid rgba(20, 45, 53, 0.2);
+  border-radius: 18rpx;
+  overflow: hidden;
+  background: rgba(255, 253, 249, 0.98);
+}
+
+.cell {
+  height: 58rpx;
+  min-height: 58rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-right: 1rpx solid rgba(20, 45, 53, 0.14);
+  border-bottom: 1rpx solid rgba(20, 45, 53, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+  color: #17313a;
+}
+
+.cell.selected {
+  background: rgba(47, 124, 125, 0.2);
+}
+
+.cell.conflict {
+  background: rgba(182, 62, 48, 0.14);
+  color: #b63e30;
+}
+
+.cell.fixed {
+  background: rgba(23, 49, 58, 0.08);
+  font-weight: 700;
+}
+
+.cell.player-entry {
+  color: #2f7c7d;
+  font-weight: 700;
+}
+
+.cell.guide-focus {
+  background: rgba(214, 122, 32, 0.18);
+  box-shadow: inset 0 0 0 3rpx rgba(214, 122, 32, 0.36);
+}
+
+.cell.box-right {
+  border-right-width: 4rpx;
+}
+
+.cell.box-bottom {
+  border-bottom-width: 4rpx;
+}
+
+.cell-content {
+  font-size: 28rpx;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.control-chip {
+  min-height: 58rpx;
+  padding: 0 14rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: #ffffff;
+  color: #17313a;
+  box-shadow: 0 10rpx 22rpx rgba(23, 49, 58, 0.08);
+}
+
+.control-chip.subtle {
+  background: rgba(47, 124, 125, 0.1);
+  color: #2f7c7d;
+  box-shadow: none;
+}
+
+.control-chip.primary {
+  background: #17313a;
+  color: #fffaf3;
+}
+
+.action-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+.compact-message {
+  margin-top: 10rpx;
+  padding: 12rpx 14rpx;
+  border-radius: 16rpx;
+  font-size: 22rpx;
+}
+
+.upload-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 320px;
+  height: 320px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.message,
+.result-placeholder {
+  margin-top: 12rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 16rpx;
+  background: rgba(47, 124, 125, 0.08);
+}
+
+.guide-panel {
+  background: linear-gradient(180deg, rgba(255, 249, 237, 0.98), rgba(252, 245, 231, 0.98));
+}
+
+.guide-title {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #17313a;
+}
+
+.guide-description {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: rgba(23, 49, 58, 0.8);
+}
+
+.guide-controls {
+  margin-top: 12rpx;
+  display: grid;
+  gap: 10rpx;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.control-chip.disabled {
+  opacity: 0.48;
+}
+
+.steps {
+  margin-top: 12rpx;
+  max-height: 220rpx;
+  box-sizing: border-box;
+}
+
+.step-item {
+  margin-top: 0;
+  padding: 12rpx 14rpx;
+  border-radius: 14rpx;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.step-item.active {
+  background: rgba(47, 124, 125, 0.14);
+  color: #17313a;
+  box-shadow: inset 0 0 0 2rpx rgba(47, 124, 125, 0.18);
+}
+
+.step-item.done {
+  opacity: 0.72;
+}
+
+.step-item + .step-item {
+  margin-top: 12rpx;
+}

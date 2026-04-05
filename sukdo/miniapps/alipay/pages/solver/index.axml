@@ -1,0 +1,71 @@
+<view class="page-shell">
+  <view class="panel-card compact-toolbar">
+    <view class="action-grid">
+      <view class="action-button control-chip" onTap="handleUploadImage">上传图片</view>
+      <view class="action-button control-chip primary" onTap="handleSolve">自动求解</view>
+      <view class="action-button control-chip" onTap="handleSample">载入示例</view>
+    </view>
+    <view
+      a:if="{{message !== '输入一个题目后，就可以直接求解。' || resultSolved || guideAvailable}}"
+      class="message compact-message"
+    >
+      {{message}}
+    </view>
+    <canvas
+      id="solver-upload-canvas"
+      canvas-id="solver-upload-canvas"
+      type="2d"
+      class="upload-canvas"
+    />
+  </view>
+
+  <view class="panel-card">
+    <view class="section-topline">
+      <view class="section-title">题目</view>
+      <view class="helper-text">{{resultSolved ? '答案已显示' : '点击步骤对照盘面'}}</view>
+    </view>
+
+    <view class="board-shell">
+      <view class="board">
+        <view a:for="{{cells}}" a:key="key">
+          <view
+            class="cell {{item.fixed ? 'fixed' : ''}} {{item.playerEntry ? 'player-entry' : ''}} {{item.selected ? 'selected' : ''}} {{item.conflict ? 'conflict' : ''}} {{item.guideFocus ? 'guide-focus' : ''}} {{item.boxRight ? 'box-right' : ''}} {{item.boxBottom ? 'box-bottom' : ''}}"
+            data-row="{{item.row}}"
+            data-col="{{item.col}}"
+            onTap="handleCellTap"
+          >
+            <view class="cell-content">{{item.displayValue}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="panel-card guide-panel">
+    <view class="section-topline">
+      <view class="section-title">解题步骤</view>
+      <view class="helper-text">{{guideAvailable ? guideProgressText : stepCountText + ' 条'}}</view>
+    </view>
+    <view a:if="{{guideAvailable}}" class="guide-title">{{guideStepTitle}}</view>
+    <view a:if="{{guideAvailable}}" class="guide-description">{{guideStepDescription}}</view>
+    <view a:if="{{guideAvailable}}" class="guide-controls">
+      <view class="action-button control-chip subtle" onTap="handleStartGuide">从头引导</view>
+      <view class="action-button control-chip subtle {{guideCanGoPrev ? '' : 'disabled'}}" onTap="handlePrevGuideStep">上一步</view>
+      <view class="action-button control-chip subtle {{guideCanGoNext ? '' : 'disabled'}}" onTap="handleNextGuideStep">下一步</view>
+      <view class="action-button control-chip" onTap="handleShowGuideSolution">最终答案</view>
+    </view>
+    <scroll-view class="steps" scroll-y="{{true}}" scroll-into-view="{{guideScrollTargetId}}">
+      <view
+        a:for="{{steps}}"
+        a:key="key"
+        id="{{item.key}}"
+        class="step-item {{item.active ? 'active' : ''}} {{item.done ? 'done' : ''}}"
+        data-step-index="{{item.index}}"
+        onTap="handleJumpToGuideStep"
+      >
+        {{item.text}}
+      </view>
+      <view a:if="{{!steps.length}}" class="result-placeholder">求解后会在这里列出关键步骤。</view>
+    </scroll-view>
+  </view>
+</view>

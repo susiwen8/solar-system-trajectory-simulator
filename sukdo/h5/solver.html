@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sukdo H5 Solver</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="h5-body">
+    <main class="mobile-shell solver-shell">
+      <header class="mobile-hero compact-hero solver-hero">
+        <div class="hero-topline compact-topline">
+          <h1>H5 解题</h1>
+          <a class="ghost-link" href="./index.html">返回游戏</a>
+        </div>
+        <div id="h5-solver-primary-actions" class="action-grid compact-actions hero-actions">
+          <button id="h5-solver-solve" type="button" class="action-button control-chip primary">自动求解</button>
+          <button id="h5-solver-clear" type="button" class="action-button control-chip">清空全部</button>
+        </div>
+      </header>
+
+      <div class="solver-workspace">
+        <section class="panel-card solver-board-panel">
+          <div class="section-topline">
+            <div class="section-title">题目盘面</div>
+            <div id="h5-solver-progress" class="helper-pill">0 条</div>
+          </div>
+          <div class="board-shell">
+            <div id="h5-solver-board" class="board" aria-label="H5 Sudoku solver board"></div>
+          </div>
+        </section>
+
+        <section class="panel-card guide-panel solver-guide-panel">
+          <div class="section-topline">
+            <div class="section-title">解题步骤</div>
+            <div id="h5-solver-step-count" class="helper-pill">0</div>
+          </div>
+          <div id="h5-solver-guide-controls" class="action-grid compact-actions"></div>
+          <ol id="h5-solver-steps" class="solver-steps"></ol>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="../src/h5/solver-page.js?v=20260402-6"></script>
+  </body>
+</html>

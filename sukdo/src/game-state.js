@@ -32,6 +32,10 @@ function isEditableCell(state, row, col) {
   return state.puzzle[row][col] === 0;
 }
 
+function getActiveDigit(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 9 ? value : null;
+}
+
 function isSolved(board, solution) {
   return board.every((row, rowIndex) =>
     row.every((value, colIndex) => value === solution[rowIndex][colIndex])
@@ -108,6 +112,8 @@ export function createGameState(options = {}) {
         }
       : generatePuzzle(difficulty);
 
+  const selectedCell = findFirstEditableCell(generatedGame.puzzle);
+
   return {
     difficulty: generatedGame.difficulty ?? difficulty,
     puzzle: cloneBoard(generatedGame.puzzle),
@@ -122,7 +128,8 @@ export function createGameState(options = {}) {
     elapsedSeconds: options.elapsedSeconds ?? 0,
     hintsUsed: options.hintsUsed ?? 0,
     traceCell: null,
-    selectedCell: findFirstEditableCell(generatedGame.puzzle)
+    selectedCell,
+    activeDigit: getActiveDigit(generatedGame.puzzle[selectedCell.row][selectedCell.col])
   };
 }
 
@@ -130,7 +137,8 @@ export function selectCell(state, row, col) {
   return {
     ...state,
     traceCell: null,
-    selectedCell: { row, col }
+    selectedCell: { row, col },
+    activeDigit: getActiveDigit(state.board[row][col])
   };
 }
 
@@ -154,9 +162,18 @@ export function togglePrefillMode(state) {
 
 export function enterDigit(state, digit) {
   const { row, col } = state.selectedCell;
+  const activeDigit = getActiveDigit(digit);
 
-  if (!isEditableCell(state, row, col) || digit < 1 || digit > 9) {
+  if (activeDigit === null) {
     return state;
+  }
+
+  if (!isEditableCell(state, row, col)) {
+    return {
+      ...state,
+      traceCell: null,
+      activeDigit
+    };
   }
 
   if (state.notesMode && state.board[row][col] === 0) {
@@ -171,7 +188,8 @@ export function enterDigit(state, digit) {
     return {
       ...state,
       traceCell: null,
-      notes
+      notes,
+      activeDigit
     };
   }
 
@@ -193,7 +211,8 @@ export function enterDigit(state, digit) {
           prefills[row][col] === state.nextPrefillOrder
             ? state.nextPrefillOrder + 1
             : state.nextPrefillOrder,
-        traceCell: null
+        traceCell: null,
+        activeDigit
       },
       board
     );
@@ -211,7 +230,8 @@ export function enterDigit(state, digit) {
       ...state,
       notes,
       prefills,
-      traceCell: null
+      traceCell: null,
+      activeDigit
     },
     board
   );
@@ -241,7 +261,8 @@ export function clearCell(state) {
     notes,
     prefills,
     traceCell: null,
-    completed: false
+    completed: false,
+    activeDigit: null
   };
 }
 
@@ -257,18 +278,22 @@ export function resetGame(state) {
     elapsedSeconds: 0,
     hintsUsed: 0,
     traceCell: null,
-    completed: false
+    completed: false,
+    activeDigit: null
   };
 }
 
 export function moveSelection(state, rowOffset, colOffset) {
+  const selectedCell = {
+    row: clamp(state.selectedCell.row + rowOffset, 0, BOARD_SIZE - 1),
+    col: clamp(state.selectedCell.col + colOffset, 0, BOARD_SIZE - 1)
+  };
+
   return {
     ...state,
     traceCell: null,
-    selectedCell: {
-      row: clamp(state.selectedCell.row + rowOffset, 0, BOARD_SIZE - 1),
-      col: clamp(state.selectedCell.col + colOffset, 0, BOARD_SIZE - 1)
-    }
+    selectedCell,
+    activeDigit: getActiveDigit(state.board[selectedCell.row][selectedCell.col])
   };
 }
 
@@ -304,7 +329,8 @@ export function applyHint(state) {
       prefills,
       hintsUsed: state.hintsUsed + 1,
       traceCell: null,
-      selectedCell: targetCell
+      selectedCell: targetCell,
+      activeDigit: getActiveDigit(board[targetCell.row][targetCell.col])
     },
     board
   );
@@ -339,7 +365,8 @@ export function locateFirstWrongPrefill(state) {
   return {
     ...state,
     selectedCell: { row: wrongPrefill.row, col: wrongPrefill.col },
-    traceCell: { row: wrongPrefill.row, col: wrongPrefill.col }
+    traceCell: { row: wrongPrefill.row, col: wrongPrefill.col },
+    activeDigit: getActiveDigit(state.board[wrongPrefill.row][wrongPrefill.col])
   };
 }
 
@@ -369,7 +396,8 @@ export function createSnapshot(state) {
     elapsedSeconds: state.elapsedSeconds,
     hintsUsed: state.hintsUsed,
     traceCell: state.traceCell ? { ...state.traceCell } : null,
-    selectedCell: { ...state.selectedCell }
+    selectedCell: { ...state.selectedCell },
+    activeDigit: state.activeDigit
   };
 }
 
@@ -385,11 +413,22 @@ export function restoreGameState(snapshot) {
     return null;
   }
 
+  const selectedCell =
+    snapshot.selectedCell &&
+    Number.isInteger(snapshot.selectedCell.row) &&
+    Number.isInteger(snapshot.selectedCell.col)
+      ? {
+          row: clamp(snapshot.selectedCell.row, 0, BOARD_SIZE - 1),
+          col: clamp(snapshot.selectedCell.col, 0, BOARD_SIZE - 1)
+        }
+      : findFirstEditableCell(snapshot.puzzle);
+  const board = cloneBoard(snapshot.board);
+
   return {
     difficulty: snapshot.difficulty ?? 'medium',
     puzzle: cloneBoard(snapshot.puzzle),
     solution: cloneBoard(snapshot.solution),
-    board: cloneBoard(snapshot.board),
+    board,
     notes: cloneNotes(snapshot.notes),
     notesMode: Boolean(snapshot.notesMode),
     prefillMode: Boolean(snapshot.prefillMode),
@@ -410,14 +449,9 @@ export function restoreGameState(snapshot) {
             col: clamp(snapshot.traceCell.col, 0, BOARD_SIZE - 1)
           }
         : null,
-    selectedCell:
-      snapshot.selectedCell &&
-      Number.isInteger(snapshot.selectedCell.row) &&
-      Number.isInteger(snapshot.selectedCell.col)
-        ? {
-            row: clamp(snapshot.selectedCell.row, 0, BOARD_SIZE - 1),
-            col: clamp(snapshot.selectedCell.col, 0, BOARD_SIZE - 1)
-          }
-        : findFirstEditableCell(snapshot.puzzle)
+    selectedCell,
+    activeDigit:
+      getActiveDigit(snapshot.activeDigit) ??
+      getActiveDigit(board[selectedCell.row][selectedCell.col])
   };
 }

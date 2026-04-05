@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildGuideTimeline,
   buildSolverCells,
+  buildSolverStepItems,
   formatSolverStep,
   getSolverMessage
 } from '../src/solver-view.js';
@@ -57,7 +59,7 @@ test('getSolverMessage maps solve outcomes into user-facing copy', () => {
   );
   assert.equal(
     getSolverMessage({ status: 'solved', steps: [{}, {}, {}] }),
-    '已找到唯一解，共记录 3 步。'
+    '已找到唯一解，共记录 3 步。可以点击步骤回看每一步。'
   );
 });
 
@@ -73,5 +75,43 @@ test('formatSolverStep turns recorded solving events into readable Chinese text'
   assert.equal(
     formatSolverStep({ type: 'backtrack', row: 4, col: 4, value: 7 }, 2),
     '3. 第 5 行第 5 列填入 7 后走不通，回退。'
+  );
+});
+
+test('buildGuideTimeline replays the board state for each recorded solve step', () => {
+  const timeline = buildGuideTimeline(createBoard(), [
+    { type: 'single', row: 0, col: 0, value: 5, candidates: [5] },
+    { type: 'guess', row: 0, col: 1, value: 3, candidates: [3, 4] },
+    { type: 'backtrack', row: 0, col: 1, value: 3 },
+    { type: 'single', row: 0, col: 1, value: 4, candidates: [4] }
+  ]);
+
+  assert.equal(timeline.length, 4);
+  assert.equal(timeline[0].board[0][0], 5);
+  assert.equal(timeline[1].board[0][1], 3);
+  assert.equal(timeline[2].board[0][1], 0);
+  assert.equal(timeline[3].board[0][1], 4);
+  assert.equal(timeline[3].title, '第 4 步 · 唯一候选');
+});
+
+test('buildSolverStepItems marks active and completed guide steps for clickable playback', () => {
+  const steps = buildSolverStepItems(
+    buildGuideTimeline(createBoard(), [
+      { type: 'single', row: 0, col: 0, value: 5, candidates: [5] },
+      { type: 'single', row: 0, col: 1, value: 4, candidates: [4] }
+    ]),
+    1
+  );
+
+  assert.deepEqual(
+    steps.map((step) => ({
+      index: step.index,
+      active: step.active,
+      done: step.done
+    })),
+    [
+      { index: 0, active: false, done: true },
+      { index: 1, active: true, done: false }
+    ]
   );
 });

@@ -37,6 +37,7 @@ class FakeElement {
     this.innerHTML = '';
     this.textContent = '';
     this.value = '';
+    this.disabled = false;
     this.listeners = {};
     this.classList = new FakeClassList();
   }
@@ -45,23 +46,43 @@ class FakeElement {
     this.listeners[type] ??= [];
     this.listeners[type].push(handler);
   }
+
+  querySelector() {
+    return null;
+  }
 }
 
 function countCells(markup) {
   return (markup.match(/data-row="/g) ?? []).length;
 }
 
+function getButtonMarkup(markup, label) {
+  const buttons = markup.match(/<button[\s\S]*?<\/button>/g) ?? [];
+  return buttons.find((button) => button.includes(`aria-label="${label}"`)) ?? '';
+}
+
+function getButtonClassNames(markup, label) {
+  const match = getButtonMarkup(markup, label).match(/class="([^"]+)"/);
+  return match?.[1] ?? '';
+}
+
+function getStepClassNames(markup, index) {
+  const items = markup.match(/<li[\s\S]*?<\/li>/g) ?? [];
+  const target = items.find((item) => item.includes(`data-step-index="${index}"`)) ?? '';
+  const match = target.match(/class="([^"]+)"/);
+  return match?.[1] ?? '';
+}
+
 function createHarness() {
   const windowListeners = {};
   const selectors = {
     '#solver-board': new FakeElement(),
-    '#solver-input': new FakeElement(),
-    '#solver-import': new FakeElement(),
     '#solver-solve': new FakeElement(),
     '#solver-clear': new FakeElement(),
     '#solver-sample': new FakeElement(),
+    '#solver-guide-prev': new FakeElement(),
+    '#solver-guide-next': new FakeElement(),
     '#solver-message': new FakeElement(),
-    '#solver-result-board': new FakeElement(),
     '#solver-steps': new FakeElement(),
     '#solver-step-count': new FakeElement()
   };
@@ -95,33 +116,117 @@ test('solver-main bootstraps and solves the sample puzzle', async () => {
   await import(`../src/solver-main.js?test=${Date.now()}`);
 
   assert.equal(countCells(selectors['#solver-board'].innerHTML), 81);
+  assert.equal(selectors['#solver-guide-prev'].disabled, true);
+  assert.equal(selectors['#solver-guide-next'].disabled, true);
 
   selectors['#solver-sample'].listeners.click[0]();
   selectors['#solver-solve'].listeners.click[0]();
 
   assert.match(selectors['#solver-message'].textContent, /已找到唯一解/);
-  assert.equal(countCells(selectors['#solver-result-board'].innerHTML), 81);
-  assert.match(selectors['#solver-steps'].innerHTML, /<li>/);
+  assert.equal(countCells(selectors['#solver-board'].innerHTML), 81);
+  assert.match(selectors['#solver-board'].innerHTML, /result-cell/);
+  assert.match(selectors['#solver-steps'].innerHTML, /data-step-index="0"/);
+  assert.match(getStepClassNames(selectors['#solver-steps'].innerHTML, 50), /\bactive\b/);
   assert.match(selectors['#solver-step-count'].textContent, /\d+/);
+  assert.equal(selectors['#solver-guide-prev'].disabled, false);
+  assert.equal(selectors['#solver-guide-next'].disabled, true);
 });
 
-test('solver-main flags conflicts immediately after importing an invalid puzzle', async () => {
+test('solver-main lets the user click a solve step to replay that moment on the board', async () => {
   const { selectors } = createHarness();
+
+  await import(`../src/solver-main.js?test=${Date.now()}-guide-step-click`);
+
+  selectors['#solver-sample'].listeners.click[0]();
+  selectors['#solver-solve'].listeners.click[0]();
+  selectors['#solver-steps'].listeners.click[0]({
+    target: {
+      closest() {
+        return {
+          dataset: {
+            stepIndex: '3'
+          }
+        };
+      }
+    }
+  });
+
+  assert.match(getStepClassNames(selectors['#solver-steps'].innerHTML, 0), /\bdone\b/);
+  assert.match(getStepClassNames(selectors['#solver-steps'].innerHTML, 3), /\bactive\b/);
+  assert.match(
+    getButtonClassNames(selectors['#solver-board'].innerHTML, '输入第 5 行第 3 列'),
+    /\bguide-focus\b/
+  );
+  assert.match(
+    getButtonMarkup(selectors['#solver-board'].innerHTML, '输入第 5 行第 3 列'),
+    />6</
+  );
+  assert.doesNotMatch(
+    getButtonMarkup(selectors['#solver-board'].innerHTML, '输入第 9 行第 7 列'),
+    />1</
+  );
+});
+
+test('solver-main lets previous and next buttons move through guide steps', async () => {
+  const { selectors } = createHarness();
+
+  await import(`../src/solver-main.js?test=${Date.now()}-guide-buttons`);
+
+  selectors['#solver-sample'].listeners.click[0]();
+  selectors['#solver-solve'].listeners.click[0]();
+
+  selectors['#solver-guide-prev'].listeners.click[0]();
+
+  assert.match(getStepClassNames(selectors['#solver-steps'].innerHTML, 49), /\bactive\b/);
+  assert.equal(selectors['#solver-guide-prev'].disabled, false);
+  assert.equal(selectors['#solver-guide-next'].disabled, false);
+  assert.doesNotMatch(
+    getButtonMarkup(selectors['#solver-board'].innerHTML, '输入第 9 行第 7 列'),
+    />1</
+  );
+
+  selectors['#solver-guide-next'].listeners.click[0]();
+
+  assert.match(getStepClassNames(selectors['#solver-steps'].innerHTML, 50), /\bactive\b/);
+  assert.equal(selectors['#solver-guide-next'].disabled, true);
+  assert.match(
+    getButtonMarkup(selectors['#solver-board'].innerHTML, '输入第 9 行第 7 列'),
+    />1</
+  );
+});
+
+test('solver-main flags conflicts immediately while entering an invalid puzzle on the board', async () => {
+  const { selectors, windowListeners } = createHarness();
 
   await import(`../src/solver-main.js?test=${Date.now()}-invalid`);
 
-  selectors['#solver-input'].value =
-    '550000000' +
-    '000000000' +
-    '000000000' +
-    '000000000' +
-    '000000000' +
-    '000000000' +
-    '000000000' +
-    '000000000' +
-    '000000000';
+  selectors['#solver-board'].listeners.click[0]({
+    target: {
+      closest() {
+        return {
+          dataset: {
+            row: '0',
+            col: '0'
+          }
+        };
+      }
+    }
+  });
+  windowListeners.keydown({ key: '5', target: { tagName: 'BODY' } });
 
-  selectors['#solver-import'].listeners.click[0]();
+  selectors['#solver-board'].listeners.click[0]({
+    target: {
+      closest() {
+        return {
+          dataset: {
+            row: '0',
+            col: '1'
+          }
+        };
+      }
+    }
+  });
+  windowListeners.keydown({ key: '5', target: { tagName: 'BODY' } });
 
   assert.match(selectors['#solver-board'].innerHTML, /conflict/);
   assert.equal(
@@ -130,17 +235,26 @@ test('solver-main flags conflicts immediately after importing an invalid puzzle'
   );
 });
 
-test('solver-main ignores board hotkeys while the textarea is focused', async () => {
+test('solver-main lets keyboard input edit the selected board cell directly', async () => {
   const { selectors, windowListeners } = createHarness();
 
-  await import(`../src/solver-main.js?test=${Date.now()}-textarea-focus`);
+  await import(`../src/solver-main.js?test=${Date.now()}-board-hotkeys`);
 
-  windowListeners.keydown({
-    key: '5',
-    target: { tagName: 'TEXTAREA' }
+  selectors['#solver-board'].listeners.click[0]({
+    target: {
+      closest() {
+        return {
+          dataset: {
+            row: '0',
+            col: '0'
+          }
+        };
+      }
+    }
   });
+  windowListeners.keydown({ key: '5', target: { tagName: 'BODY' } });
 
-  assert.doesNotMatch(selectors['#solver-board'].innerHTML, />5</);
+  assert.match(selectors['#solver-board'].innerHTML, />5</);
 });
 
 test('solver-main preloads a valid puzzle from the URL without auto-solving it', async () => {
@@ -160,10 +274,9 @@ test('solver-main preloads a valid puzzle from the URL without auto-solving it',
 
   await import(`../src/solver-main.js?test=${Date.now()}-query-preload`);
 
-  assert.equal(selectors['#solver-input'].value, puzzle);
   assert.match(selectors['#solver-board'].innerHTML, />5</);
   assert.equal(selectors['#solver-step-count'].textContent, '0');
-  assert.match(selectors['#solver-result-board'].innerHTML, /求解后会在这里显示完整答案/);
+  assert.doesNotMatch(selectors['#solver-board'].innerHTML, /result-cell/);
   assert.equal(selectors['#solver-steps'].innerHTML, '');
 });
 
@@ -173,10 +286,9 @@ test('solver-main falls back gracefully when the URL puzzle is invalid', async (
 
   await import(`../src/solver-main.js?test=${Date.now()}-query-invalid`);
 
-  assert.equal(selectors['#solver-input'].value, '');
   assert.equal(
     selectors['#solver-message'].textContent,
-    '带入题目失败，请重新导入或手动填写。'
+    '带入题目失败，请重新刷新或手动填写。'
   );
   assert.equal(selectors['#solver-step-count'].textContent, '0');
 });

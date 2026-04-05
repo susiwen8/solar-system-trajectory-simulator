@@ -1,0 +1,9 @@
+{
+  "desc": "sukdo wechat mini program sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

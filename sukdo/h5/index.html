@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sukdo H5 Game</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="h5-body">
+    <main class="mobile-shell">
+      <header class="mobile-hero compact-hero game-hero">
+        <div class="hero-topline compact-topline">
+          <h1>数独</h1>
+          <a id="h5-solver-link" class="ghost-link accent" href="./solver.html">解题页</a>
+        </div>
+      </header>
+
+      <section class="panel-card board-panel">
+        <div class="section-topline">
+          <div>
+            <div class="section-title">当前难度</div>
+            <strong id="h5-difficulty-label" class="section-value">中等</strong>
+          </div>
+          <div class="board-meta">
+            <div id="h5-timer" class="helper-text">00:00</div>
+            <div id="h5-status-pill" class="helper-pill">继续挑战</div>
+          </div>
+        </div>
+        <div class="board-shell">
+          <div id="h5-game-board" class="board" aria-label="H5 Sudoku board"></div>
+        </div>
+      </section>
+
+      <section class="panel-card controls-panel">
+        <div id="h5-difficulty-buttons"></div>
+        <div id="h5-game-keypad"></div>
+        <div id="h5-action-grid"></div>
+        <p id="h5-game-message" class="message">正在加载 H5 数独游戏…</p>
+      </section>
+
+      <div id="h5-new-game-dialog"></div>
+    </main>
+
+    <script type="module" src="../src/h5/game-page.js?v=20260402-3"></script>
+  </body>
+</html>

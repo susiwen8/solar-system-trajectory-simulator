@@ -1,0 +1,81 @@
+<view class="page-shell">
+  <view class="top-timer-card">
+    <view class="timer-label">计时</view>
+    <view class="timer-value">{{timerText}}</view>
+  </view>
+
+  <view class="panel-card board-panel">
+    <view class="board-shell">
+      <view class="board">
+        <block wx:for="{{cells}}" wx:key="key">
+          <view
+            class="cell {{item.fixed ? 'fixed' : ''}} {{item.playerEntry ? 'player-entry' : ''}} {{item.prefillEntry ? 'prefill-entry' : ''}} {{item.selected ? 'selected' : ''}} {{item.related ? 'related' : ''}} {{item.sameValue ? 'same-value' : ''}} {{item.traceOrigin ? 'trace-origin' : ''}} {{item.boxRight ? 'box-right' : ''}} {{item.boxBottom ? 'box-bottom' : ''}}"
+            data-row="{{item.row}}"
+            data-col="{{item.col}}"
+            bindtap="handleCellTap"
+          >
+            <view wx:if="{{item.displayValue}}" class="cell-content">{{item.displayValue}}</view>
+            <view wx:else class="notes-grid">
+              <block wx:for="{{item.notes}}" wx:key="value" wx:for-item="note">
+                <text class="note">{{note.label}}</text>
+              </block>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <view class="panel-card controls-panel">
+    <view class="difficulty-row">
+      <block wx:for="{{difficultyOptions}}" wx:key="value">
+        <view
+          class="difficulty-pill {{item.active ? 'active' : ''}}"
+          data-difficulty="{{item.value}}"
+          bindtap="handleDifficultyTap"
+        >
+          {{item.label}}
+        </view>
+      </block>
+    </view>
+
+    <view class="keypad">
+      <block wx:for="{{keypadDigits}}" wx:key="*this">
+        <view
+          class="keypad-button control-chip subtle {{activeDigit === item ? 'active' : ''}}"
+          data-digit="{{item}}"
+          bindtap="handleDigitTap"
+        >{{item}}</view>
+      </block>
+    </view>
+
+    <view class="action-grid">
+      <view class="action-button control-chip {{notesMode ? 'primary' : ''}}" bindtap="handleToggleNotes">笔记</view>
+      <view class="action-button control-chip {{prefillMode ? 'primary' : ''}}" bindtap="handleTogglePrefill">试填</view>
+      <view class="action-button control-chip" bindtap="handleLocatePrefill">纠错</view>
+      <view class="action-button control-chip" bindtap="handleApplyHint">提示</view>
+      <view class="action-button control-chip" bindtap="handleClearCell">清空</view>
+      <view class="action-button control-chip" bindtap="handleResetGame">重开</view>
+      <view class="action-button control-chip accent" bindtap="handleRefreshGame">换一局</view>
+      <view class="action-button control-chip" bindtap="handleOpenRules">规则</view>
+      <view class="action-button control-chip" bindtap="handleOpenSolver">解题</view>
+    </view>
+
+    <view wx:if="{{message}}" class="message-inline">{{message}}</view>
+  </view>
+
+  <view wx:if="{{newGameDialogVisible}}" class="new-game-dialog-mask" catchtap="noop">
+    <view class="new-game-dialog-card" catchtap="noop">
+      <view class="new-game-dialog-title">{{newGameDialogTitle}}</view>
+      <view class="new-game-dialog-content">{{newGameDialogContent}}</view>
+      <view class="new-game-confirm-check {{newGameDialogAcknowledged ? 'checked' : ''}}" bindtap="handleToggleNewGameConfirm">
+        <view class="new-game-confirm-indicator">{{newGameDialogAcknowledged ? '✓' : ''}}</view>
+        <view class="new-game-confirm-label">{{newGameDialogSecondaryConfirmText}}</view>
+      </view>
+      <view class="new-game-dialog-actions">
+        <view class="new-game-dialog-button secondary" bindtap="handleCancelNewGame">{{newGameDialogCancelText}}</view>
+        <view class="new-game-dialog-button accent {{newGameDialogConfirmEnabled ? '' : 'disabled'}}" bindtap="handleConfirmNewGame">{{newGameDialogConfirmText}}</view>
+      </view>
+    </view>
+  </view>
+</view>

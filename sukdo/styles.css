@@ -20,6 +20,7 @@
   --radius-md: 16px;
   --radius-sm: 12px;
   --board-size: min(78vw, 640px);
+  --solver-step-preview-height: 3.3rem;
 }
 
 * {
@@ -178,6 +179,10 @@ button {
   margin-top: 1.25rem;
 }
 
+.solver-layout {
+  margin-top: 0;
+}
+
 .board-panel {
   border-radius: var(--radius-xl);
   padding: 1.2rem;
@@ -302,12 +307,18 @@ button {
 }
 
 .cell.same-value {
-  background: rgba(23, 49, 58, 0.1);
+  background: rgba(47, 124, 125, 0.18);
+  box-shadow: inset 0 0 0 2px rgba(23, 49, 58, 0.18);
 }
 
 .cell.conflict {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.cell.guide-focus {
+  background: rgba(214, 122, 32, 0.18);
+  box-shadow: inset 0 0 0 3px rgba(214, 122, 32, 0.34);
 }
 
 .cell.completed {
@@ -391,6 +402,14 @@ button {
   color: #fffaf4;
 }
 
+.keypad-button.active {
+  background: linear-gradient(180deg, rgba(47, 124, 125, 0.98), rgba(35, 104, 105, 0.95));
+  color: #f3fbf9;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.2),
+    0 10px 24px rgba(47, 124, 125, 0.18);
+}
+
 .keypad-button.secondary {
   background: linear-gradient(180deg, rgba(47, 124, 125, 0.98), rgba(35, 104, 105, 0.95));
   color: #f3fbf9;
@@ -467,48 +486,11 @@ button {
   gap: 0.7rem;
 }
 
-.solver-textarea {
-  width: 100%;
-  margin-top: 0.9rem;
-  border: 1px solid rgba(23, 49, 58, 0.12);
-  border-radius: var(--radius-md);
-  padding: 0.95rem 1rem;
-  resize: vertical;
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--ink);
-  font: inherit;
-  line-height: 1.55;
-}
-
-.solver-textarea:focus-visible {
-  outline: 2px solid rgba(47, 124, 125, 0.25);
-  border-color: rgba(47, 124, 125, 0.3);
-}
-
-.solver-inline-actions {
-  margin-top: 0.8rem;
-}
-
-.solver-result-topline {
-  align-items: start;
-}
-
-.solver-result-frame {
-  margin-top: 0.9rem;
-}
-
-.solver-result-board {
-  max-width: 360px;
-}
-
-.solver-result-empty {
+.solver-guide-controls {
   display: grid;
-  place-items: center;
-  width: 100%;
-  min-height: 220px;
-  padding: 1rem;
-  text-align: center;
-  color: var(--ink-soft);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.9rem;
 }
 
 .solver-cell {
@@ -516,28 +498,55 @@ button {
 }
 
 .result-cell {
-  cursor: default;
-}
-
-.result-cell:hover {
-  background: transparent;
-}
-
-.solver-summary {
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--ink);
+  color: var(--accent-strong);
+  background: rgba(224, 105, 66, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(224, 105, 66, 0.12);
 }
 
 .solver-steps {
   margin: 0.9rem 0 0;
-  padding-left: 1.2rem;
+  padding: 0 0.35rem 0 0;
+  padding-right: 0.35rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  max-height: calc(var(--solver-step-preview-height) * 5 + 0.9rem);
+  overflow-y: auto;
   color: var(--ink-soft);
   line-height: 1.65;
 }
 
-.solver-steps li + li {
-  margin-top: 0.6rem;
+.solver-step {
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(23, 49, 58, 0.78);
+  line-height: 1.55;
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease, opacity 140ms ease;
+  scroll-margin-block: 1rem;
+}
+
+.solver-step:hover {
+  background: rgba(47, 124, 125, 0.1);
+  transform: translateY(-1px);
+}
+
+.solver-step.active {
+  background: rgba(47, 124, 125, 0.14);
+  color: #17313a;
+  box-shadow: inset 0 0 0 2px rgba(47, 124, 125, 0.18);
+}
+
+.solver-step.done {
+  opacity: 0.72;
+}
+
+.action-button:disabled {
+  opacity: 0.48;
+  pointer-events: none;
+  box-shadow: inset 0 -1px 0 rgba(23, 49, 58, 0.08);
 }
 
 @keyframes glow-pop {
@@ -600,7 +609,7 @@ button {
     min-height: 2.35rem;
   }
 
-  .solver-textarea {
-    min-height: 10rem;
+  .solver-steps {
+    max-height: calc(var(--solver-step-preview-height) * 4 + 0.9rem);
   }
 }

@@ -10,44 +10,14 @@
     <div class="page-glow page-glow-left"></div>
     <div class="page-glow page-glow-right"></div>
 
-    <main class="app-shell">
-      <section class="hero-card">
-        <div class="top-nav">
-          <a class="hero-link" href="./index.html">返回游戏</a>
-        </div>
-        <p class="eyebrow">SUKDO SOLVER</p>
-        <div class="hero-copy">
-          <div>
-            <h1>把未完成的数独交给机器</h1>
-            <p class="hero-text">
-              支持手动填写和文本粘贴，先校验冲突，再自动补出唯一解，还能展开查看机器求解过程。
-            </p>
-          </div>
-          <div class="hero-stats">
-            <div class="stat-card">
-              <span class="stat-label">输入</span>
-              <strong>手填 / 粘贴</strong>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">结果</span>
-              <strong>唯一解判断</strong>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">步骤</span>
-              <strong id="solver-step-count">0</strong>
-            </div>
-          </div>
-        </div>
-      </section>
-
+    <main class="app-shell solver-shell">
       <section class="game-layout solver-layout">
         <section class="board-panel">
           <div class="panel-topline">
             <div>
-              <p class="panel-label">题目输入</p>
-              <strong>9 x 9 数独盘面</strong>
+              <strong>数独盘面</strong>
             </div>
-            <div class="status-pill">自动校验</div>
+            <div class="status-pill"><span id="solver-step-count">0</span> 步</div>
           </div>
 
           <div class="board-frame">
@@ -59,50 +29,20 @@
             <button id="solver-clear" class="action-button">清空全部</button>
             <button id="solver-sample" class="action-button">载入示例</button>
           </div>
+          <p id="solver-message" class="message">输入一个题目后，就可以直接求解。</p>
         </section>
 
         <aside class="side-panel">
-          <section class="panel-card">
-            <p class="panel-title">粘贴导入</p>
-            <p class="panel-note">
-              支持 81 位数字，也接受空格、换行、分隔符，`0` 或 `.` 都会视为空格。
-            </p>
-            <textarea
-              id="solver-input"
-              class="solver-textarea"
-              rows="7"
-              placeholder="例如：530070000600195000098000060800060003400803001700020006060000280000419005000080079"
-            ></textarea>
-            <div class="solver-inline-actions">
-              <button id="solver-import" class="action-button">导入题目</button>
+          <section class="panel-card panel-card-accent solver-steps-panel">
+            <div class="panel-topline">
+              <strong>求解步骤</strong>
             </div>
-          </section>
-
-          <section class="panel-card">
-            <p class="panel-title">状态</p>
-            <p id="solver-message" class="message">输入一个题目后，就可以直接求解。</p>
-          </section>
-
-          <section class="panel-card panel-card-accent">
-            <div class="panel-topline solver-result-topline">
-              <div>
-                <p class="panel-title">求解结果</p>
-                <p class="panel-note">原题数字会保留沉色，补出的答案会用强调色展示。</p>
-              </div>
+            <div class="solver-guide-controls">
+              <button id="solver-guide-prev" class="action-button" disabled>上一步</button>
+              <button id="solver-guide-next" class="action-button" disabled>下一步</button>
             </div>
-            <div class="board-frame solver-result-frame">
-              <div
-                id="solver-result-board"
-                class="board solver-result-board"
-                aria-label="Sudoku solver result board"
-              ></div>
-            </div>
-          </section>
-
-          <details class="panel-card">
-            <summary class="solver-summary">求解步骤展开查看</summary>
             <ol id="solver-steps" class="solver-steps"></ol>
-          </details>
+          </section>
         </aside>
       </section>
     </main>

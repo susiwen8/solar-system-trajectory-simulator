@@ -116,8 +116,16 @@ function isPeerCell(first, second) {
   );
 }
 
+function getHighlightedDigit() {
+  const selectedValue = state.board[state.selectedCell.row]?.[state.selectedCell.col] ?? 0;
+
+  return Number.isInteger(state.activeDigit) && state.activeDigit >= 1 && state.activeDigit <= 9
+    ? state.activeDigit
+    : selectedValue;
+}
+
 function renderBoard() {
-  const selectedValue = state.board[state.selectedCell.row][state.selectedCell.col];
+  const highlightedValue = getHighlightedDigit();
   const markup = [];
 
   for (let row = 0; row < 9; row += 1) {
@@ -129,7 +137,8 @@ function renderBoard() {
       const prefillEntry = state.prefills[row][col] > 0;
       const selected = state.selectedCell.row === row && state.selectedCell.col === col;
       const related = !selected && isPeerCell(state.selectedCell, { row, col });
-      const sameValue = selectedValue !== 0 && !selected && value === selectedValue;
+      const sameValue =
+        highlightedValue !== 0 && highlightedValue !== null && !selected && value === highlightedValue;
       const traceOrigin =
         state.traceCell?.row === row && state.traceCell?.col === col;
       const classes = ['cell'];
@@ -166,10 +175,11 @@ function renderBoard() {
 
 function renderKeypad() {
   const buttons = [];
+  const activeDigit = getHighlightedDigit();
 
   for (let value = 1; value <= 9; value += 1) {
     buttons.push(
-      `<button class="keypad-button digit" data-digit="${value}" aria-label="填入 ${value}">${value}</button>`
+      `<button class="keypad-button digit${activeDigit === value ? ' active' : ''}" data-digit="${value}" aria-label="填入 ${value}">${value}</button>`
     );
   }
 

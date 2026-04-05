@@ -227,6 +227,36 @@ test('main.js distinguishes player-entered digits and highlights matching values
     getButtonClassNames(selectors['#board'].innerHTML, '第 3 行第 3 列'),
     /\bsame-value\b/
   );
+  assert.match(selectors['#keypad'].innerHTML, /class="keypad-button digit active"[^>]*data-digit="5"/);
+});
+
+test('main.js highlights matching values after keypad input even when notes mode keeps the cell empty', async () => {
+  const board = Array.from({ length: 9 }, () => Array(9).fill(0));
+  board[2][2] = 5;
+
+  const { selectors } = createHarness({
+    session: createSessionSnapshot({
+      board,
+      notesMode: true,
+      selectedCell: { row: 0, col: 0 }
+    })
+  });
+
+  await import(`../src/main.js?test=${Date.now()}-keypad-highlight`);
+
+  selectors['#keypad'].listeners.click[0]({
+    target: {
+      closest() {
+        return { dataset: { digit: '5' } };
+      }
+    }
+  });
+
+  assert.match(
+    getButtonClassNames(selectors['#board'].innerHTML, '第 3 行第 3 列'),
+    /\bsame-value\b/
+  );
+  assert.match(selectors['#keypad'].innerHTML, /class="keypad-button digit active"[^>]*data-digit="5"/);
 });
 
 test('main.js renders tentative fills and traced origin markers', async () => {
